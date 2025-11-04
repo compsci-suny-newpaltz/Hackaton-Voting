@@ -14,12 +14,20 @@ function isAdmin(user) {
   
   // Hardcoded super admin
   if (email === 'gopeen1@newpaltz.edu') return true;
+  if (email === 'manzim1@newpaltz.edu') return true;
+
   
   // Faculty are auto-admins
   if (roles.includes('faculty')) return true;
   
-  // Check whitelist database
-  return db.isAdmin(email);
+  // Check whitelist database (with error handling)
+  try {
+    return db.isAdmin(email);
+  } catch (error) {
+    // If database isn't available, only check hardcoded and faculty
+    console.warn('Database unavailable for admin check, using fallback logic:', error.message);
+    return false;
+  }
 }
 
 /**

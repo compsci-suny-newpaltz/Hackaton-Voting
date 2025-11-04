@@ -4,6 +4,18 @@
       <div class="text-gray-600">Loading...</div>
     </div>
     
+    <div v-else-if="databaseError" class="text-center py-12">
+      <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6 max-w-2xl mx-auto">
+        <h2 class="text-xl font-semibold text-yellow-800 mb-2">Database Not Initialized</h2>
+        <p class="text-yellow-700 mb-4">
+          The database needs to be set up before the application can work properly.
+        </p>
+        <p class="text-sm text-yellow-600">
+          Please ensure better-sqlite3 is installed and run: <code class="bg-yellow-100 px-2 py-1 rounded">npm run init-db</code>
+        </p>
+      </div>
+    </div>
+    
     <div v-else>
       <!-- Current/Upcoming Hackathon -->
       <div v-if="currentHackathon" class="mb-12">
@@ -69,6 +81,7 @@ import Countdown from '@/components/Countdown.vue';
 import ProjectCard from '@/components/ProjectCard.vue';
 
 const loading = ref(true);
+const databaseError = ref(false);
 const hackathons = ref([]);
 const currentHackathon = ref(null);
 const projects = ref([]);
@@ -92,15 +105,45 @@ function formatDate(dateString) {
 async function loadData() {
   try {
     const response = await api.getHackathons();
+    
+    // Handle database errors gracefully
+    if (response.data.error) {
+      console.error('Database error:', response.data.error);
+      databaseError.value = true;
+      hackathons.value = [];
+      currentHackathon.value = null;
+      return;
+    }
+    
+    databaseError.value = false;
+    
     hackathons.value = response.data.all || [];
     currentHackathon.value = response.data.current;
     
     if (currentHackathon.value) {
-      const hackathonResponse = await api.getHackathon(currentHackathon.value.id);
-      projects.value = hackathonResponse.data.projects || [];
+      try {
+        const hackathonResponse = await api.getHackathon(currentHackathon.value.id);
+        if (hackathonResponse.data.error) {
+          console.error('Database error loading hackathon:', hackathonResponse.data.error);
+          projects.value = [];
+        } else {
+          projects.value = hackathonResponse.data.projects || [];
+        }
+      } catch (error) {
+        console.error('Failed to load hackathon details:', error);
+        projects.value = [];
+      }
     }
   } catch (error) {
     console.error('Failed to load hackathons:', error);
+    // Check if it's a database error
+    if (error.response?.status === 500 && error.response?.data?.error) {
+      databaseError.value = true;
+    }
+    // Set empty defaults on error
+    hackathons.value = [];
+    currentHackathon.value = null;
+    projects.value = [];
   } finally {
     loading.value = false;
   }

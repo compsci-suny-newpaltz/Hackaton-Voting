@@ -1,12 +1,24 @@
 require('dotenv').config();
-const Database = require('better-sqlite3');
 const path = require('path');
 
-const dbPath = process.env.DATABASE_URL || './hackathon.db';
-const db = new Database(dbPath);
+let Database;
+let db;
 
-// Enable foreign keys
-db.pragma('foreign_keys = ON');
+try {
+  Database = require('better-sqlite3');
+  const dbPath = process.env.DATABASE_URL || './hackathon.db';
+  db = new Database(dbPath);
+  
+  // Enable foreign keys
+  db.pragma('foreign_keys = ON');
+  console.log('Database initialized successfully');
+} catch (error) {
+  console.error('Failed to initialize database:', error.message);
+  console.error('Make sure better-sqlite3 is properly installed.');
+  console.error('Run: npm rebuild better-sqlite3 (after installing Windows SDK)');
+  // Create a mock database object to prevent crashes
+  db = null;
+}
 
 // Helper to parse JSON fields
 function parseJSON(value) {
@@ -24,10 +36,18 @@ function stringifyJSON(value) {
   return typeof value === 'string' ? value : JSON.stringify(value);
 }
 
+// Helper to check if database is available
+function checkDb() {
+  if (!db) {
+    throw new Error('Database not initialized. Please install better-sqlite3 and initialize the database.');
+  }
+}
+
 // Database operations
 const dbOperations = {
   // Admins
   getAdmins() {
+    checkDb();
     return db.prepare('SELECT * FROM admins ORDER BY added_at DESC').all();
   },
   
@@ -57,14 +77,17 @@ const dbOperations = {
   
   // Hackathons
   getHackathons() {
+    checkDb();
     return db.prepare('SELECT * FROM hackathons ORDER BY start_time DESC').all();
   },
   
   getHackathon(id) {
+    checkDb();
     return db.prepare('SELECT * FROM hackathons WHERE id = ?').get(id);
   },
   
   getCurrentHackathon() {
+    checkDb();
     return db.prepare(`
       SELECT * FROM hackathons 
       WHERE status != 'concluded' 

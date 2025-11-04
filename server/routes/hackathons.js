@@ -8,33 +8,49 @@ const { addDays } = require('date-fns');
 
 // Get all hackathons (public)
 router.get('/', (req, res) => {
-  const hackathons = db.getHackathons();
-  const current = db.getCurrentHackathon();
-  
-  res.json({
-    current,
-    all: hackathons.map(h => ({
-      ...h,
-      status: calculateHackathonStatus(h)
-    }))
-  });
+  try {
+    const hackathons = db.getHackathons();
+    const current = db.getCurrentHackathon();
+    
+    res.json({
+      current,
+      all: hackathons.map(h => ({
+        ...h,
+        status: calculateHackathonStatus(h)
+      }))
+    });
+  } catch (error) {
+    console.error('Error getting hackathons:', error);
+    res.status(500).json({ 
+      error: 'Database error. Please ensure the database is initialized.',
+      details: error.message 
+    });
+  }
 });
 
 // Get hackathon by ID (public)
 router.get('/:id', (req, res) => {
-  const hackathon = db.getHackathon(req.params.id);
-  if (!hackathon) {
-    return res.status(404).json({ error: 'Hackathon not found' });
+  try {
+    const hackathon = db.getHackathon(req.params.id);
+    if (!hackathon) {
+      return res.status(404).json({ error: 'Hackathon not found' });
+    }
+    
+    const status = calculateHackathonStatus(hackathon);
+    const projects = db.getProjectsByHackathon(hackathon.id);
+    
+    res.json({
+      ...hackathon,
+      status,
+      projects
+    });
+  } catch (error) {
+    console.error('Error getting hackathon:', error);
+    res.status(500).json({ 
+      error: 'Database error. Please ensure the database is initialized.',
+      details: error.message 
+    });
   }
-  
-  const status = calculateHackathonStatus(hackathon);
-  const projects = db.getProjectsByHackathon(hackathon.id);
-  
-  res.json({
-    ...hackathon,
-    status,
-    projects
-  });
 });
 
 // Create hackathon (admin only)

@@ -11,6 +11,7 @@ import HackathonSettings from './views/HackathonSettings.vue';
 import JudgeVoting from './views/JudgeVoting.vue';
 
 const routes = [
+  { path: '/', redirect: '/hackathons/' },
   { path: '/hackathons/', name: 'home', component: Home },
   { path: '/hackathons/:id', name: 'hackathon-detail', component: HackathonDetail },
   { path: '/hackathons/:id/projects/:projectId', name: 'project-detail', component: ProjectDetail },
