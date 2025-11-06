@@ -1,10 +1,42 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const db = require('../db');
 const { requireNP, requireAdmin } = require('../middleware');
 const { calculateHackathonStatus } = require('../utils/hackathon-status');
 const { logAudit } = require('../utils/audit-logger');
 const { addDays } = require('date-fns');
+
+// Ensure upload directories exist
+const bannersDir = path.join(__dirname, '../../uploads/banners');
+if (!fs.existsSync(bannersDir)) {
+  fs.mkdirSync(bannersDir, { recursive: true });
+}
+
+const bannerStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, bannersDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'hackathon-' + req.params.id + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const bannerUpload = multer({
+  storage: bannerStorage,
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only JPG, PNG, and WebP are allowed.'));
+    }
+  }
+});
 
 // Get all hackathons (public)
 router.get('/', (req, res) => {
@@ -97,6 +129,8 @@ router.put('/:id', requireNP, requireAdmin, (req, res) => {
   if (req.body.end_time !== undefined) updateData.end_time = req.body.end_time;
   if (req.body.vote_expiration !== undefined) updateData.vote_expiration = req.body.vote_expiration;
   if (req.body.banner_url !== undefined) updateData.banner_url = req.body.banner_url;
+  if (req.body.banner_position_x !== undefined) updateData.banner_position_x = req.body.banner_position_x;
+  if (req.body.banner_position_y !== undefined) updateData.banner_position_y = req.body.banner_position_y;
   
   db.updateHackathon(req.params.id, updateData);
   
@@ -113,7 +147,6 @@ router.post('/:id/conclude', requireNP, requireAdmin, (req, res) => {
   }
   
   db.updateHackathon(req.params.id, {
-    status: 'concluded',
     concluded_at: new Date().toISOString(),
     concluded_by: req.user.email
   });
@@ -123,6 +156,69 @@ router.post('/:id/conclude', requireNP, requireAdmin, (req, res) => {
   });
   
   res.json({ success: true });
+});
+
+// Delete hackathon (admin only)
+router.delete('/:id', requireNP, requireAdmin, (req, res) => {
+  const hackathon = db.getHackathon(req.params.id);
+  if (!hackathon) {
+    return res.status(404).json({ error: 'Hackathon not found' });
+  }
+  
+  try {
+    db.deleteHackathon(req.params.id);
+    
+    logAudit(req.user.email, 'hackathon_deleted', `hackathon_${req.params.id}`, {
+      name: hackathon.name
+    });
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting hackathon:', error);
+    res.status(500).json({ error: 'Failed to delete hackathon' });
+  }
+});
+
+// Upload hackathon banner (admin only)
+router.post('/:id/banner', requireNP, requireAdmin, bannerUpload.single('banner'), (req, res) => {
+  const hackathon = db.getHackathon(req.params.id);
+  if (!hackathon) {
+    return res.status(404).json({ error: 'Hackathon not found' });
+  }
+  
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+  
+  try {
+    const bannerUrl = `/hackathons/uploads/banners/${req.file.filename}`;
+    
+    const updateData = {
+      banner_url: bannerUrl
+    };
+    
+    // Add position if provided
+    if (req.body.position_x !== undefined) {
+      updateData.banner_position_x = parseInt(req.body.position_x);
+    }
+    if (req.body.position_y !== undefined) {
+      updateData.banner_position_y = parseInt(req.body.position_y);
+    }
+    
+    db.updateHackathon(req.params.id, updateData);
+    
+    logAudit(req.user.email, 'hackathon_banner_uploaded', `hackathon_${req.params.id}`, {
+      filename: req.file.filename
+    });
+    
+    res.json({ 
+      success: true,
+      banner_url: bannerUrl
+    });
+  } catch (error) {
+    console.error('Error uploading banner:', error);
+    res.status(500).json({ error: 'Failed to upload banner' });
+  }
 });
 
 module.exports = router;

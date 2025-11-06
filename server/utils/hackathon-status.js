@@ -12,7 +12,7 @@ function calculateHackathonStatus(hackathon) {
     : addDays(new Date(hackathon.end_time), 7); // Default: 7 days after end
   
   // If manually concluded
-  if (hackathon.status === 'concluded' || hackathon.concluded_at) {
+  if (hackathon.concluded_at) {
     return {
       status: 'concluded',
       canVote: false,
@@ -88,7 +88,12 @@ function canVoteOnProject(hackathon, userEmail, project) {
 /**
  * Check if project can be edited
  */
-function canEditProject(project, hackathon, userEmail) {
+function canEditProject(project, hackathon, userEmail, isAdmin = false) {
+  // Admins can always edit
+  if (isAdmin) {
+    return true;
+  }
+  
   // Must be team member
   const teamEmails = JSON.parse(project.team_emails || '[]');
   if (!teamEmails.map(e => e.toLowerCase()).includes(userEmail.toLowerCase())) {

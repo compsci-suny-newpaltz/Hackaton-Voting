@@ -1,7 +1,12 @@
 <template>
   <div class="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow">
-    <div v-if="project.image_url" class="h-48 bg-gray-200">
-      <img :src="project.image_url" :alt="project.name" class="w-full h-full object-cover">
+    <div v-if="project.image_url" class="h-48 bg-gray-100 overflow-hidden">
+      <img 
+        :src="project.image_url" 
+        :alt="project.name" 
+        class="w-full h-full object-cover"
+        :style="{ objectPosition: `${project.image_position_x ?? 50}% ${project.image_position_y ?? 50}%` }"
+      >
     </div>
     <div class="p-4">
       <h3 class="text-lg font-semibold mb-2">{{ project.name }}</h3>

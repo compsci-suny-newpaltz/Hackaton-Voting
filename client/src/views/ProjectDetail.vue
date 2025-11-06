@@ -6,10 +6,25 @@
     
     <div v-else-if="project">
       <div v-if="project.banner_url" class="mb-6 rounded-lg overflow-hidden">
-        <img :src="project.banner_url" :alt="project.name" class="w-full h-64 object-cover">
+        <img 
+          :src="project.banner_url" 
+          :alt="project.name" 
+          class="w-full h-64 object-cover"
+          :style="{ objectPosition: `${project.banner_position_x || 50}% ${project.banner_position_y || 50}%` }"
+        >
       </div>
       
       <h1 class="text-4xl font-bold mb-4">{{ project.name }}</h1>
+      
+      <!-- Edit Button for Team Members -->
+      <div v-if="isTeamMember" class="mb-4">
+        <router-link 
+          :to="`/hackathons/${route.params.id}/projects/${route.params.projectId}/edit`"
+          class="inline-block px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+        >
+          ✏️ Edit Project
+        </router-link>
+      </div>
       
       <div class="mb-6">
         <h3 class="text-lg font-semibold mb-2">Team Members</h3>
@@ -67,6 +82,59 @@
             Voting closes {{ formatDate(voteStatus.voteExpiration) }}
           </p>
         </div>
+        <div v-else-if="!user" class="text-gray-600">
+          <a 
+            :href="`https://hydra.newpaltz.edu/login?returnTo=${encodeURIComponent(typeof window !== 'undefined' ? window.location.href : '')}`"
+            class="text-blue-600 hover:underline"
+          >
+            Log in
+          </a> to vote on this project
+        </div>
+      </div>
+      
+      <!-- Judge Scores (for concluded hackathons) -->
+      <div v-if="judgeScores" class="bg-white rounded-lg border-2 border-yellow-400 p-6 mb-8">
+        <h3 class="text-lg font-semibold mb-4">🏆 Judge Scores</h3>
+        
+        <div v-if="judgeScores.statistics.count > 0">
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            <div class="text-center p-3 bg-gray-50 rounded">
+              <div class="text-2xl font-bold text-blue-600">{{ judgeScores.statistics.average }}</div>
+              <div class="text-sm text-gray-600">Average</div>
+            </div>
+            <div class="text-center p-3 bg-gray-50 rounded">
+              <div class="text-2xl font-bold">{{ judgeScores.statistics.count }}</div>
+              <div class="text-sm text-gray-600">Judges</div>
+            </div>
+            <div class="text-center p-3 bg-gray-50 rounded">
+              <div class="text-2xl font-bold">{{ judgeScores.statistics.min }}</div>
+              <div class="text-sm text-gray-600">Min</div>
+            </div>
+            <div class="text-center p-3 bg-gray-50 rounded">
+              <div class="text-2xl font-bold">{{ judgeScores.statistics.max }}</div>
+              <div class="text-sm text-gray-600">Max</div>
+            </div>
+          </div>
+          
+          <div class="space-y-2">
+            <h4 class="font-semibold text-sm mb-2">Individual Scores:</h4>
+            <div 
+              v-for="(score, idx) in judgeScores.scores" 
+              :key="idx"
+              class="p-3 bg-gray-50 rounded"
+            >
+              <div class="flex items-center justify-between mb-1">
+                <span class="font-medium text-sm">Judge {{ idx + 1 }}</span>
+                <span class="font-bold text-lg">{{ score.score }}/10</span>
+              </div>
+              <p v-if="score.comment" class="text-sm text-gray-600 italic">"{{ score.comment }}"</p>
+            </div>
+          </div>
+        </div>
+        
+        <div v-else class="text-gray-600">
+          No judge scores yet
+        </div>
       </div>
       
       <!-- Comments Section -->
@@ -90,7 +158,7 @@
         
         <div v-else class="mb-6 text-gray-600">
           <a 
-            :href="`https://hydra.newpaltz.edu/login?returnTo=${encodeURIComponent(window.location.href)}`"
+            :href="`https://hydra.newpaltz.edu/login?returnTo=${encodeURIComponent(typeof window !== 'undefined' ? window.location.href : '')}`"
             class="text-blue-600 hover:underline"
           >
             Login to comment
@@ -108,8 +176,52 @@
                 <div class="flex items-center mb-2">
                   <span class="font-semibold">{{ comment.display_name }}</span>
                   <span class="text-sm text-gray-500 ml-2">{{ formatRelativeTime(comment.created_at) }}</span>
+                  <span v-if="comment.updated_at" class="text-xs text-gray-400 ml-2">(edited)</span>
                 </div>
-                <p class="text-gray-700">{{ comment.content }}</p>
+                
+                <!-- Edit mode -->
+                <div v-if="editingCommentId === comment.id">
+                  <textarea 
+                    v-model="editingCommentText"
+                    class="w-full px-3 py-2 border rounded mb-2"
+                    rows="3"
+                  ></textarea>
+                  <div class="flex space-x-2">
+                    <button 
+                      @click="saveComment(comment.id)"
+                      class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                    >
+                      Save
+                    </button>
+                    <button 
+                      @click="cancelEdit"
+                      class="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+                
+                <!-- View mode -->
+                <p v-else class="text-gray-700">{{ comment.content }}</p>
+              </div>
+              
+              <!-- Action buttons (only for comment author) -->
+              <div v-if="user && comment.user_email.toLowerCase() === user.email.toLowerCase() && editingCommentId !== comment.id" class="flex space-x-1 ml-4">
+                <button 
+                  @click="startEdit(comment)"
+                  class="px-2 py-1 text-sm text-blue-600 hover:bg-blue-50 rounded"
+                  title="Edit"
+                >
+                  ✏️
+                </button>
+                <button 
+                  @click="deleteCommentConfirm(comment.id)"
+                  class="px-2 py-1 text-sm text-red-600 hover:bg-red-50 rounded"
+                  title="Delete"
+                >
+                  🗑️
+                </button>
               </div>
             </div>
           </div>
@@ -124,11 +236,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { marked } from 'marked';
 import { formatDistanceToNow, format } from 'date-fns';
-import axios from 'axios';
 import api from '@/api';
 
 const route = useRoute();
@@ -137,7 +248,24 @@ const project = ref(null);
 const comments = ref([]);
 const voteStatus = ref(null);
 const user = ref(null);
+const isAdmin = ref(false);
 const newComment = ref('');
+const judgeScores = ref(null);
+const editingCommentId = ref(null);
+const editingCommentText = ref('');
+
+const isTeamMember = computed(() => {
+  if (!user.value || !project.value) return false;
+  
+  // Admins can edit any project
+  if (isAdmin.value) return true;
+  
+  const userEmail = user.value.email.toLowerCase();
+  const teamEmails = typeof project.value.team_emails === 'string' 
+    ? JSON.parse(project.value.team_emails) 
+    : project.value.team_emails;
+  return teamEmails.map(e => e.toLowerCase()).includes(userEmail);
+});
 
 function renderMarkdown(text) {
   if (!text) return '';
@@ -167,14 +295,18 @@ function formatRelativeTime(dateString) {
 
 async function checkAuth() {
   try {
-    const response = await axios.post('https://hydra.newpaltz.edu/check', {}, {
-      withCredentials: true
+    const response = await fetch('/hackathons/api/auth/status', {
+      credentials: 'include'
     });
-    if (response.data.active) {
-      user.value = response.data;
+    const data = await response.json();
+    
+    if (data.authenticated) {
+      user.value = data.user;
+      isAdmin.value = data.isAdmin;
     }
   } catch (error) {
     user.value = null;
+    isAdmin.value = false;
   }
 }
 
@@ -187,6 +319,17 @@ async function loadData() {
     if (user.value) {
       const voteResponse = await api.getVoteStatus(route.params.id, route.params.projectId);
       voteStatus.value = voteResponse.data;
+    }
+    
+    // Try to load judge scores (will fail if hackathon not concluded)
+    try {
+      const scoresResponse = await api.getProjectScores(route.params.id, route.params.projectId);
+      if (scoresResponse.data.is_concluded) {
+        judgeScores.value = scoresResponse.data;
+      }
+    } catch (error) {
+      // Scores not available yet, that's fine
+      judgeScores.value = null;
     }
   } catch (error) {
     console.error('Failed to load project:', error);
@@ -214,6 +357,42 @@ async function addComment() {
     await loadData();
   } catch (error) {
     alert('Failed to add comment');
+  }
+}
+
+function startEdit(comment) {
+  editingCommentId.value = comment.id;
+  editingCommentText.value = comment.content;
+}
+
+function cancelEdit() {
+  editingCommentId.value = null;
+  editingCommentText.value = '';
+}
+
+async function saveComment(commentId) {
+  if (!editingCommentText.value.trim()) {
+    alert('Comment cannot be empty');
+    return;
+  }
+  
+  try {
+    await api.updateComment(route.params.id, route.params.projectId, commentId, editingCommentText.value);
+    cancelEdit();
+    await loadData();
+  } catch (error) {
+    alert('Failed to update comment');
+  }
+}
+
+async function deleteCommentConfirm(commentId) {
+  if (!confirm('Are you sure you want to delete this comment?')) return;
+  
+  try {
+    await api.deleteComment(route.params.id, route.params.projectId, commentId);
+    await loadData();
+  } catch (error) {
+    alert('Failed to delete comment');
   }
 }
 

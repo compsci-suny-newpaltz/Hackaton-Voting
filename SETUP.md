@@ -46,7 +46,7 @@ This runs both the server (port 3000) and client dev server (Vite).
 # Build client
 cd client
 npm run build
-cd ..
+cd ..`
 
 # Start server
 npm start

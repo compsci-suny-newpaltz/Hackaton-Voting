@@ -7,6 +7,43 @@
     </div>
     
     <div v-else>
+      <!-- Create Hackathon -->
+      <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <h2 class="text-xl font-semibold mb-4">Create New Hackathon</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="md:col-span-2">
+            <label class="block text-sm font-medium mb-1">Name</label>
+            <input v-model="newHackathon.name" type="text" class="w-full px-4 py-2 border rounded" placeholder="e.g., Fall 2025 Hackathon" />
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-sm font-medium mb-1">Description (optional)</label>
+            <textarea v-model="newHackathon.description" rows="3" class="w-full px-4 py-2 border rounded" placeholder="Brief description..."></textarea>
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Start Time</label>
+            <input v-model="newHackathon.start_time" type="datetime-local" class="w-full px-4 py-2 border rounded" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">End Time</label>
+            <input v-model="newHackathon.end_time" type="datetime-local" class="w-full px-4 py-2 border rounded" />
+          </div>
+          <div class="md:col-span-2">
+            <ImageUploadWithPreview
+              label="Banner Image (optional)"
+              aspect-ratio="3:1"
+              preview-height-class="h-64"
+              @file-selected="handleBannerSelected"
+              @update:position="bannerPosition = $event"
+              @clear="bannerFile = null"
+            />
+          </div>
+        </div>
+        <div class="mt-4 flex items-center space-x-2">
+          <button @click="createHackathon" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">Create</button>
+          <span class="text-sm text-gray-600">Voting expiration defaults to 7 days after the end time. You can adjust later in settings.</span>
+        </div>
+      </div>
+      
       <!-- Hackathons Section -->
       <div class="bg-white rounded-lg shadow p-6 mb-6">
         <h2 class="text-xl font-semibold mb-4">Hackathons</h2>
@@ -84,17 +121,34 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { format } from 'date-fns';
 import api from '@/api';
+import ImageUploadWithPreview from '@/components/ImageUploadWithPreview.vue';
 
 const loading = ref(true);
 const hackathons = ref([]);
 const admins = ref([]);
 const auditLogs = ref([]);
 const newAdminEmail = ref('');
+const router = useRouter();
+const bannerFile = ref(null);
+const bannerPosition = ref({ x: 50, y: 50 });
+const uploadingBanner = ref(false);
+
+const newHackathon = ref({
+  name: '',
+  description: '',
+  start_time: '', // bound to datetime-local
+  end_time: '',   // bound to datetime-local
+});
 
 function formatDate(dateString) {
   return format(new Date(dateString), 'MMM d, yyyy');
+}
+
+function handleBannerSelected(file) {
+  bannerFile.value = file;
 }
 
 async function loadData() {
@@ -129,6 +183,62 @@ async function removeAdmin(email) {
     await loadData();
   } catch (error) {
     alert('Failed to remove admin');
+  }
+}
+
+function toIso(dtLocal) {
+  // Convert 'YYYY-MM-DDTHH:mm' (local) to ISO string
+  if (!dtLocal) return '';
+  const d = new Date(dtLocal);
+  return d.toISOString();
+}
+
+async function createHackathon() {
+  if (!newHackathon.value.name || !newHackathon.value.start_time || !newHackathon.value.end_time) {
+    alert('Name, start time, and end time are required.');
+    return;
+  }
+  try {
+    const payload = {
+      name: newHackathon.value.name.trim(),
+      description: newHackathon.value.description?.trim() || '',
+      start_time: toIso(newHackathon.value.start_time),
+      end_time: toIso(newHackathon.value.end_time)
+    };
+    
+    const res = await api.createHackathon(payload);
+    const hackathonId = res.data?.id;
+    
+    if (!hackathonId) {
+      alert('Failed to create hackathon.');
+      return;
+    }
+    
+    // Upload banner if provided
+    if (bannerFile.value) {
+      try {
+        const formData = new FormData();
+        formData.append('banner', bannerFile.value);
+        formData.append('position_x', bannerPosition.value.x);
+        formData.append('position_y', bannerPosition.value.y);
+        await api.uploadHackathonBanner(hackathonId, formData);
+      } catch (uploadError) {
+        console.error('Failed to upload banner:', uploadError);
+        alert('Hackathon created, but banner upload failed. You can add it later in settings.');
+      }
+    }
+    
+    // Reset form
+    newHackathon.value = { name: '', description: '', start_time: '', end_time: '' };
+    bannerFile.value = null;
+    bannerPosition.value = { x: 50, y: 50 };
+    await loadData();
+    
+    // Navigate to settings for further configuration
+    router.push(`/hackathons/admin/hackathons/${hackathonId}/settings`);
+  } catch (error) {
+    console.error('Create hackathon failed:', error);
+    alert('Failed to create hackathon.');
   }
 }
 

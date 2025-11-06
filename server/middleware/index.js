@@ -1,9 +1,10 @@
 const { requireNP, formatDisplayName } = require('./auth');
-const { requireAdmin } = require('./admin');
+const { requireAdmin, isAdmin } = require('./admin');
 
 module.exports = {
   requireNP,
   requireAdmin,
+  isAdmin,
   formatDisplayName
 };
 

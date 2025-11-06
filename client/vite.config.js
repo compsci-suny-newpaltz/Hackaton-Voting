@@ -3,6 +3,8 @@ import vue from '@vitejs/plugin-vue';
 import path from 'path';
 
 export default defineConfig({
+  // Ensure built assets resolve under the reverse-proxied base path
+  base: '/hackathons/',
   plugins: [vue()],
   resolve: {
     alias: {
@@ -12,7 +14,8 @@ export default defineConfig({
   server: {
     proxy: {
       '/hackathons': {
-        target: 'http://localhost:3000',
+        // Keep this in sync with the server PORT in `.env`
+        target: 'http://localhost:45821',
         changeOrigin: true
       }
     }

@@ -27,6 +27,16 @@ export default {
     return api.post(`/hackathons/${id}/conclude`);
   },
   
+  deleteHackathon(id) {
+    return api.delete(`/hackathons/${id}`);
+  },
+  
+  uploadHackathonBanner(hackathonId, formData) {
+    return api.post(`/hackathons/${hackathonId}/banner`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+  
   // Projects
   getProject(hackathonId, projectId) {
     return api.get(`/${hackathonId}/projects/${projectId}`);
@@ -49,8 +59,24 @@ export default {
     });
   },
   
+  uploadProjectBanner(hackathonId, projectId, formData) {
+    return api.post(`/${hackathonId}/projects/${projectId}/banner`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+  
+  uploadProjectImage(hackathonId, projectId, formData) {
+    return api.post(`/${hackathonId}/projects/${projectId}/image`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+  
   toggleDeadlineOverride(hackathonId, projectId) {
     return api.post(`/${hackathonId}/projects/${projectId}/deadline-override`);
+  },
+  
+  deleteProject(hackathonId, projectId) {
+    return api.delete(`/${hackathonId}/projects/${projectId}`);
   },
   
   // Voting
@@ -117,6 +143,15 @@ export default {
     return api.post(`/admin/hackathons/${hackathonId}/judges/${codeId}/revoke`, {}, {
       params: { code: codeId }
     });
+  },
+  
+  // Results
+  getHackathonResults(hackathonId) {
+    return api.get(`/${hackathonId}/results`);
+  },
+  
+  getProjectScores(hackathonId, projectId) {
+    return api.get(`/${hackathonId}/projects/${projectId}/scores`);
   }
 };
 

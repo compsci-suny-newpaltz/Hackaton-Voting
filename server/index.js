@@ -21,7 +21,8 @@ ensureUploadDir();
 
 // Serve static files
 app.use('/hackathons/uploads', express.static(path.join(__dirname, '../uploads')));
-app.use('/hackathons/static', express.static(path.join(__dirname, '../public')));
+// Serve built client at the base path so Vite assets resolve correctly (base '/hackathons/')
+app.use('/hackathons', express.static(path.join(__dirname, '../public')));
 
 // Health check
 app.get('/health', (req, res) => {
@@ -79,10 +80,22 @@ router.use('/api/hackathons', require('./routes/hackathons'));
 router.use('/api', require('./routes/projects'));
 router.use('/api', require('./routes/voting'));
 router.use('/api', require('./routes/comments'));
+router.use('/api', require('./routes/results'));
 router.use('/api/admin', require('./routes/admin'));
 
-// Mount router at /hackathons
+// Mount API router at /hackathons
 app.use('/hackathons', router);
+
+// SPA fallback: send index.html for any non-API route under /hackathons
+app.get('/hackathons/*', (req, res, next) => {
+  // Let API and uploads continue down the chain
+  // req.path includes the full path like /hackathons/api/... or /hackathons/3/projects/1
+  const path = req.path;
+  if (path.startsWith('/hackathons/api') || path.startsWith('/hackathons/uploads')) {
+    return next();
+  }
+  res.sendFile(require('path').join(__dirname, '../public/index.html'));
+});
 
 // Error handling middleware
 app.use((err, req, res, next) => {

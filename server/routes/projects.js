@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const db = require('../db');
-const { requireNP, requireAdmin } = require('../middleware');
+const { requireNP, requireAdmin, isAdmin } = require('../middleware');
 const { canEditProject } = require('../utils/hackathon-status');
 const { uploadProjectFile } = require('../utils/file-manager');
 const { logAudit } = require('../utils/audit-logger');
@@ -84,8 +84,9 @@ router.put('/:hackathonId/projects/:projectId', requireNP, async (req, res) => {
     return res.status(404).json({ error: 'Hackathon not found' });
   }
   
-  // Check edit permissions
-  if (!canEditProject(project, hackathon, req.user.email)) {
+  // Check edit permissions (admins can edit any project)
+  const userIsAdmin = isAdmin(req.user);
+  if (!canEditProject(project, hackathon, req.user.email, userIsAdmin)) {
     return res.status(403).json({ error: 'You do not have permission to edit this project' });
   }
   
@@ -94,7 +95,11 @@ router.put('/:hackathonId/projects/:projectId', requireNP, async (req, res) => {
   if (req.body.description !== undefined) updateData.description = req.body.description;
   if (req.body.github_link !== undefined) updateData.github_link = req.body.github_link;
   if (req.body.banner_url !== undefined) updateData.banner_url = req.body.banner_url;
+  if (req.body.banner_position_x !== undefined) updateData.banner_position_x = req.body.banner_position_x;
+  if (req.body.banner_position_y !== undefined) updateData.banner_position_y = req.body.banner_position_y;
   if (req.body.image_url !== undefined) updateData.image_url = req.body.image_url;
+  if (req.body.image_position_x !== undefined) updateData.image_position_x = req.body.image_position_x;
+  if (req.body.image_position_y !== undefined) updateData.image_position_y = req.body.image_position_y;
   
   db.updateProject(req.params.projectId, updateData);
   
@@ -113,8 +118,9 @@ router.post('/:hackathonId/projects/:projectId/file', requireNP, upload.single('
     return res.status(404).json({ error: 'Hackathon not found' });
   }
   
-  // Check edit permissions
-  if (!canEditProject(project, hackathon, req.user.email)) {
+  // Check edit permissions (admins can edit any project)
+  const userIsAdmin = isAdmin(req.user);
+  if (!canEditProject(project, hackathon, req.user.email, userIsAdmin)) {
     return res.status(403).json({ error: 'You do not have permission to edit this project' });
   }
   
@@ -138,6 +144,140 @@ router.post('/:hackathonId/projects/:projectId/file', requireNP, upload.single('
   }
 });
 
+// Upload banner image
+router.post('/:hackathonId/projects/:projectId/banner', requireNP, upload.single('banner'), async (req, res) => {
+  const project = db.getProject(req.params.projectId);
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+  
+  const hackathon = db.getHackathon(req.params.hackathonId);
+  if (!hackathon) {
+    return res.status(404).json({ error: 'Hackathon not found' });
+  }
+  
+  // Check edit permissions (admins can edit any project)
+  const userIsAdmin = isAdmin(req.user);
+  if (!canEditProject(project, hackathon, req.user.email, userIsAdmin)) {
+    return res.status(403).json({ error: 'You do not have permission to edit this project' });
+  }
+  
+  if (!req.file) {
+    return res.status(400).json({ error: 'No banner uploaded' });
+  }
+  
+  // Validate file type
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(req.file.mimetype)) {
+    fs.unlinkSync(req.file.path); // Clean up
+    return res.status(400).json({ error: 'Banner must be JPG, PNG, or WebP' });
+  }
+  
+  // Validate file size (25MB)
+  if (req.file.size > 25 * 1024 * 1024) {
+    fs.unlinkSync(req.file.path); // Clean up
+    return res.status(400).json({ error: 'Banner must be less than 25MB' });
+  }
+  
+  try {
+    const uploadsDir = path.join(__dirname, '../../uploads/banners');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+    
+    const ext = path.extname(req.file.originalname);
+    const filename = `banner_${req.params.projectId}_${Date.now()}${ext}`;
+    const finalPath = path.join(uploadsDir, filename);
+    
+    // Delete old banner if exists
+    if (project.banner_url) {
+      const oldPath = project.banner_url.replace('/hackathons/uploads/banners/', '');
+      const oldFullPath = path.join(uploadsDir, oldPath);
+      if (fs.existsSync(oldFullPath)) {
+        fs.unlinkSync(oldFullPath);
+      }
+    }
+    
+    fs.renameSync(req.file.path, finalPath);
+    
+    const bannerUrl = `/hackathons/uploads/banners/${filename}`;
+    db.updateProject(req.params.projectId, { banner_url: bannerUrl });
+    
+    logAudit(req.user.email, 'banner_uploaded', `project_${req.params.projectId}`, { filename });
+    
+    res.json({ success: true, banner_url: bannerUrl });
+  } catch (error) {
+    console.error('Banner upload error:', error);
+    res.status(500).json({ error: 'Failed to upload banner' });
+  }
+});
+
+// Upload project image
+router.post('/:hackathonId/projects/:projectId/image', requireNP, upload.single('image'), async (req, res) => {
+  const project = db.getProject(req.params.projectId);
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+  
+  const hackathon = db.getHackathon(req.params.hackathonId);
+  if (!hackathon) {
+    return res.status(404).json({ error: 'Hackathon not found' });
+  }
+  
+  // Check edit permissions (admins can edit any project)
+  const userIsAdmin = isAdmin(req.user);
+  if (!canEditProject(project, hackathon, req.user.email, userIsAdmin)) {
+    return res.status(403).json({ error: 'You do not have permission to edit this project' });
+  }
+  
+  if (!req.file) {
+    return res.status(400).json({ error: 'No image uploaded' });
+  }
+  
+  // Validate file type
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(req.file.mimetype)) {
+    fs.unlinkSync(req.file.path); // Clean up
+    return res.status(400).json({ error: 'Image must be JPG, PNG, or WebP' });
+  }
+  
+  // Validate file size (25MB)
+  if (req.file.size > 25 * 1024 * 1024) {
+    fs.unlinkSync(req.file.path); // Clean up
+    return res.status(400).json({ error: 'Image must be less than 25MB' });
+  }
+  
+  try {
+    const uploadsDir = path.join(__dirname, '../../uploads/images');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+    
+    const ext = path.extname(req.file.originalname);
+    const filename = `image_${req.params.projectId}_${Date.now()}${ext}`;
+    const finalPath = path.join(uploadsDir, filename);
+    
+    // Delete old image if exists
+    if (project.image_url) {
+      const oldPath = project.image_url.replace('/hackathons/uploads/images/', '');
+      const oldFullPath = path.join(uploadsDir, oldPath);
+      if (fs.existsSync(oldFullPath)) {
+        fs.unlinkSync(oldFullPath);
+      }
+    }
+    
+    fs.renameSync(req.file.path, finalPath);
+    
+    const imageUrl = `/hackathons/uploads/images/${filename}`;
+    db.updateProject(req.params.projectId, { image_url: imageUrl });
+    
+    logAudit(req.user.email, 'image_uploaded', `project_${req.params.projectId}`, { filename });
+    
+    res.json({ success: true, image_url: imageUrl });
+  } catch (error) {
+    console.error('Image upload error:', error);
+    res.status(500).json({ error: 'Failed to upload image' });
+  }
+});
+
 // Toggle deadline override (admin only)
 router.post('/:hackathonId/projects/:projectId/deadline-override', requireNP, requireAdmin, (req, res) => {
   const project = db.getProject(req.params.projectId);
@@ -158,6 +298,32 @@ router.post('/:hackathonId/projects/:projectId/deadline-override', requireNP, re
   });
   
   res.json({ success: true, deadline_override_enabled: newValue });
+});
+
+// Delete project (admin only)
+router.delete('/:hackathonId/projects/:projectId', requireNP, requireAdmin, (req, res) => {
+  const project = db.getProject(req.params.projectId);
+  if (!project) {
+    return res.status(404).json({ error: 'Project not found' });
+  }
+  
+  if (project.hackathon_id !== parseInt(req.params.hackathonId)) {
+    return res.status(404).json({ error: 'Project not found in this hackathon' });
+  }
+  
+  try {
+    db.deleteProject(req.params.projectId);
+    
+    logAudit(req.user.email, 'project_deleted', `project_${req.params.projectId}`, {
+      name: project.name,
+      hackathon_id: project.hackathon_id
+    });
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting project:', error);
+    res.status(500).json({ error: 'Failed to delete project' });
+  }
 });
 
 module.exports = router;

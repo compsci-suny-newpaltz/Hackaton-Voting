@@ -11,6 +11,44 @@ try {
   
   // Enable foreign keys
   db.pragma('foreign_keys = ON');
+  
+  // Run migrations
+  try {
+    // Check if image_position columns exist for projects
+    const projectTableInfo = db.prepare("PRAGMA table_info(projects)").all();
+    const hasProjectPositionX = projectTableInfo.some(col => col.name === 'image_position_x');
+    const hasProjectPositionY = projectTableInfo.some(col => col.name === 'image_position_y');
+    
+    if (!hasProjectPositionX || !hasProjectPositionY) {
+      console.log('Running migration: Adding project image position columns...');
+      if (!hasProjectPositionX) {
+        db.prepare('ALTER TABLE projects ADD COLUMN image_position_x INTEGER DEFAULT 50').run();
+      }
+      if (!hasProjectPositionY) {
+        db.prepare('ALTER TABLE projects ADD COLUMN image_position_y INTEGER DEFAULT 50').run();
+      }
+      console.log('Project image position migration completed');
+    }
+    
+    // Check if banner_position columns exist for hackathons
+    const hackathonTableInfo = db.prepare("PRAGMA table_info(hackathons)").all();
+    const hasBannerPositionX = hackathonTableInfo.some(col => col.name === 'banner_position_x');
+    const hasBannerPositionY = hackathonTableInfo.some(col => col.name === 'banner_position_y');
+    
+    if (!hasBannerPositionX || !hasBannerPositionY) {
+      console.log('Running migration: Adding hackathon banner position columns...');
+      if (!hasBannerPositionX) {
+        db.prepare('ALTER TABLE hackathons ADD COLUMN banner_position_x INTEGER DEFAULT 50').run();
+      }
+      if (!hasBannerPositionY) {
+        db.prepare('ALTER TABLE hackathons ADD COLUMN banner_position_y INTEGER DEFAULT 50').run();
+      }
+      console.log('Hackathon banner position migration completed');
+    }
+  } catch (migrationError) {
+    console.warn('Migration warning:', migrationError.message);
+  }
+  
   console.log('Database initialized successfully');
 } catch (error) {
   console.error('Failed to initialize database:', error.message);
@@ -90,7 +128,7 @@ const dbOperations = {
     checkDb();
     return db.prepare(`
       SELECT * FROM hackathons 
-      WHERE status != 'concluded' 
+      WHERE concluded_at IS NULL 
       ORDER BY start_time DESC 
       LIMIT 1
     `).get();
@@ -104,14 +142,29 @@ const dbOperations = {
   },
   
   updateHackathon(id, data) {
+    checkDb();
     const fields = [];
     const values = [];
     for (const [key, value] of Object.entries(data)) {
-      fields.push(`${key} = ?`);
-      values.push(value);
+      if (value !== undefined) {
+        fields.push(`${key} = ?`);
+        values.push(value);
+      }
     }
+    
+    // Fail loudly if no fields to update
+    if (fields.length === 0) {
+      throw new Error('updateHackathon: No fields provided to update');
+    }
+    
     values.push(id);
     return db.prepare(`UPDATE hackathons SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  },
+  
+  deleteHackathon(id) {
+    checkDb();
+    // Foreign key constraints will cascade delete related projects, votes, comments
+    return db.prepare('DELETE FROM hackathons WHERE id = ?').run(id);
   },
   
   // Projects
@@ -152,6 +205,7 @@ const dbOperations = {
   },
   
   updateProject(id, data) {
+    checkDb();
     const fields = [];
     const values = [];
     for (const [key, value] of Object.entries(data)) {
@@ -163,8 +217,19 @@ const dbOperations = {
         values.push(value);
       }
     }
+    
+    if (fields.length === 0) {
+      throw new Error('No fields to update');
+    }
+    
     values.push(id);
     return db.prepare(`UPDATE projects SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  },
+  
+  deleteProject(id) {
+    checkDb();
+    // Foreign key constraints will cascade delete related votes, comments, judges
+    return db.prepare('DELETE FROM projects WHERE id = ?').run(id);
   },
   
   // Popular votes
@@ -203,6 +268,42 @@ const dbOperations = {
   // Judge votes
   getJudgeVotesByProject(projectId) {
     return db.prepare('SELECT * FROM judge_votes WHERE project_id = ?').all(projectId);
+  },
+  
+  getJudgeResultsByHackathon(hackathonId) {
+    return db.prepare(`
+      SELECT 
+        p.id as project_id,
+        p.name as project_name,
+        jv.score,
+        jv.comment,
+        jc.judge_name,
+        jv.voted_at
+      FROM projects p
+      LEFT JOIN judge_votes jv ON p.id = jv.project_id
+      LEFT JOIN judge_codes jc ON jv.judge_code_id = jc.id
+      WHERE p.hackathon_id = ?
+      ORDER BY p.id, jv.voted_at
+    `).all(hackathonId);
+  },
+  
+  getProjectScoresSummary(hackathonId) {
+    return db.prepare(`
+      SELECT 
+        p.id,
+        p.name,
+        COUNT(DISTINCT pv.id) as popular_votes,
+        COUNT(DISTINCT jv.id) as judge_vote_count,
+        ROUND(AVG(jv.score), 2) as avg_judge_score,
+        MIN(jv.score) as min_judge_score,
+        MAX(jv.score) as max_judge_score
+      FROM projects p
+      LEFT JOIN popular_votes pv ON p.id = pv.project_id
+      LEFT JOIN judge_votes jv ON p.id = jv.project_id
+      WHERE p.hackathon_id = ?
+      GROUP BY p.id
+      ORDER BY avg_judge_score DESC NULLS LAST, popular_votes DESC
+    `).all(hackathonId);
   },
   
   addJudgeVote(data) {
