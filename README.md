@@ -13,6 +13,69 @@ A complete hackathon management system for SUNY New Paltz using Hydra SSO authen
 - **Comments**: Real-time commenting system
 - **Audit Logging**: Complete audit trail of all admin actions
 
+## Product & UX Decisions (Authoritative)
+
+This section captures key decisions that guide the UX and data model. Implementation will follow this source of truth.
+
+### Homepage & Navigation
+- Homepage shows:
+	- Active hackathons list (card: image, total projects, total judges, prize pool like "$x in prizes")
+	- Past hackathons list
+	- Onboarding panel explaining what a hackathon is
+- Each hackathon has its own page with full description and a Projects tab.
+- Projects list layout (per-hackathon): Reddit-style row with upvote control, image, title, comment count, and team size.
+
+### Popular Vote
+- One vote per user per project (DB uniqueness on userId+projectId); users cannot vote for their own project.
+- Popular voting may continue after a hackathon concludes; a snapshot of the popular vote count is captured at vote close and displayed for each project.
+- Live popular vote counts are shown with polling (every 5s).
+- Admins can view votes per project via an "Audit Votes" button linking to a dedicated audit page.
+
+### Judging & Rubric
+- Category scores are always 1–10.
+- Weighted rubric: each category has a multiplier (default 1.0); weights are editable. Judges see the multipliers and a preview score per project.
+- Judge comments per category are optional (clearly labeled that comments will be displayed).
+- Judges may submit/save scores per project individually. Saved projects show a green outline and a green checkbox.
+- A running counter shows progress, e.g., (x/y judgments completed) above the project list.
+- Judges can edit their submitted scores until the judging phase closes.
+
+### Drafts, Teams, Notifications
+- Draft projects are visible only to the creator until published (not visible to teammates until published).
+- No notifications (no emails or in-app notifications) for any events.
+- Project ownership is not transferable.
+
+### Email Policy & Identity
+- Emails are stored/compared in lowercase (SSO provides lowercase emails).
+- Allowed domains include subdomains of newpaltz.edu (e.g., @alumni.newpaltz.edu).
+- Public views mask emails; full emails are visible to judges, admins, and team members.
+
+### Files & Uploads
+- Single-file replace model; overwrites the previous file on successful upload.
+- Existing size/type rules remain unchanged.
+
+### Comments
+- Soft-delete (content hidden but record retained).
+- Max length: 2000 characters.
+- No markdown support.
+
+### Phases, Countdown, and Concurrency
+- Multiple hackathons may be active concurrently; users select a specific hackathon from the homepage list.
+- Countdown widgets show the nearest relevant phase deadline for the viewed context.
+- Review period duration and similar timelines are hackathon-configurable.
+
+### Security, Rate Limits, and Real-time
+- No anonymous voting.
+- No additional rate limiting required at this time.
+- No real-time push required; polling is sufficient for live counts.
+
+### Data Model Preferences
+- Rubric categories stored in a separate table (not JSON) for admin editing and weighting.
+- Hard deletes for entities (no soft-delete at the entity level), except comments which are soft-deleted.
+
+### Error Schema & Test/Deploy
+- Keep the existing error response shape as currently implemented.
+- No additional testing/deployment requirements specified for now.
+
 ## Setup
 
 ### Prerequisites
@@ -151,9 +214,13 @@ See `server/db/schema.sql` for complete schema. Key tables:
 
 - Uses SQLite for simplicity (can be swapped for PostgreSQL)
 - File uploads delete old versions (only latest file kept)
-- Projects sorted by popular vote count in all displays
-- Popular voting continues after hackathon ends until `vote_expiration`
+- Popular voting continues after hackathon ends until `vote_expiration`; at close, a snapshot score is recorded and displayed per project.
+- Projects may present live popular vote counts via 5s polling during active voting
 - Judge codes are hackathon-specific and cryptographically secure
+
+## Roadmap / TODOs
+
+See `TODOS.md` for a phased implementation plan derived from the decisions above.
 
 ## License
 
