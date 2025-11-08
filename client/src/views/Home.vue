@@ -17,35 +17,40 @@
     </div>
     
     <div v-else>
-      <!-- Current/Upcoming Hackathon -->
-      <div v-if="currentHackathon" class="mb-12">
-        <div v-if="currentHackathon.banner_url" class="mb-6 rounded-lg overflow-hidden">
-          <img 
-            :src="currentHackathon.banner_url" 
-            :alt="currentHackathon.name" 
-            class="w-full h-64 object-cover"
-            :style="{ objectPosition: `${currentHackathon.banner_position_x || 50}% ${currentHackathon.banner_position_y || 50}%` }"
-          >
-        </div>
-        
-        <h1 class="text-4xl font-bold mb-4">{{ currentHackathon.name }}</h1>
-        
-        <div v-if="currentHackathon.description" class="prose mb-6" v-html="renderMarkdown(currentHackathon.description)"></div>
-        
-        <Countdown :hackathon="currentHackathon" :status="getHackathonStatus(currentHackathon)" />
-        
-        <div v-if="shouldShowProjects" class="mt-8">
-          <h2 class="text-2xl font-semibold mb-4">Projects ({{ projects.length }})</h2>
-          <div v-if="projects.length === 0" class="text-center py-8 text-gray-500">
-            <p>No projects yet. {{ isAdmin ? 'Initialize projects in the admin settings.' : 'Check back later!' }}</p>
+      <!-- Active or Upcoming Hackathons (list) -->
+      <div v-if="activeUpcomingHackathons.length > 0" class="mb-12 space-y-12">
+        <div 
+          v-for="hack in activeUpcomingHackathons" 
+          :key="hack.id" 
+          class="border rounded-xl bg-white shadow p-6 relative"
+        >
+          <div v-if="hack.banner_url" class="mb-6 rounded-lg overflow-hidden">
+            <img :src="hack.banner_url" :alt="hack.name" class="w-full h-64 object-cover" :style="{ objectPosition: `${hack.banner_position_x || 50}% ${hack.banner_position_y || 50}%` }" />
           </div>
-          <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <ProjectCard 
-              v-for="project in projects" 
-              :key="project.id"
-              :project="project"
-              :hackathon-id="currentHackathon.id"
-            />
+          <div class="flex items-center justify-between mb-4">
+            <h1 class="text-3xl font-bold">{{ hack.name }}</h1>
+            <router-link :to="`/hackathons/${hack.id}`" class="text-sm px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700">View Details</router-link>
+          </div>
+          <div v-if="hack.description" class="prose mb-4" v-html="renderMarkdown(hack.description)"></div>
+          <Countdown 
+            :hackathon="hack" 
+            :status="getHackathonStatus(hack)"
+            @refresh="() => refreshSingleHackathon(hack.id)"
+            @status-transition="() => handleHackathonStatusTransition(hack.id)"
+          />
+          <div v-if="shouldShowProjectsFor(hack)" class="mt-6">
+            <h2 class="text-xl font-semibold mb-3">Projects ({{ (hack._projects && hack._projects.length) || 0 }})</h2>
+            <div v-if="!(hack._projects && hack._projects.length)" class="text-center py-6 text-gray-500">
+              <p>No projects yet. {{ isAdmin ? 'Initialize projects in the admin settings.' : 'Check back later!' }}</p>
+            </div>
+            <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <ProjectCard 
+                v-for="project in hack._projects" 
+                :key="project.id"
+                :project="project"
+                :hackathon-id="hack.id"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -91,9 +96,10 @@ import ProjectCard from '@/components/ProjectCard.vue';
 const loading = ref(true);
 const databaseError = ref(false);
 const hackathons = ref([]);
-const currentHackathon = ref(null);
+const currentHackathon = ref(null); // retained for backward compatibility (first non-concluded)
 const projects = ref([]);
 const isAdmin = ref(false);
+const activeUpcomingHackathons = ref([]); // enriched hackathon objects with _projects
 
 const pastHackathons = computed(() => {
   return hackathons.value.filter(h => {
@@ -103,12 +109,11 @@ const pastHackathons = computed(() => {
   });
 });
 
-const shouldShowProjects = computed(() => {
-  if (!currentHackathon.value) return false;
-  // Show projects if hackathon has started (active, ended, vote_expired, or concluded)
-  const status = getHackathonStatus(currentHackathon.value);
+function shouldShowProjectsFor(hack) {
+  if (!hack) return false;
+  const status = getHackathonStatus(hack);
   return status !== 'upcoming';
-});
+}
 
 function getHackathonStatus(hackathon) {
   if (!hackathon) return 'upcoming';
@@ -169,22 +174,21 @@ async function loadData() {
     
     databaseError.value = false;
     
-    hackathons.value = response.data.all || [];
-    currentHackathon.value = response.data.current;
-    
-    if (currentHackathon.value) {
-      try {
-        const hackathonResponse = await api.getHackathon(currentHackathon.value.id);
-        if (hackathonResponse.data.error) {
-          console.error('Database error loading hackathon:', hackathonResponse.data.error);
-          projects.value = [];
-        } else {
-          projects.value = hackathonResponse.data.projects || [];
-        }
-      } catch (error) {
-        console.error('Failed to load hackathon details:', error);
-        projects.value = [];
-      }
+    hackathons.value = (response.data.all || []).map(h => ({ ...h }));
+    // Build active/upcoming list
+    activeUpcomingHackathons.value = hackathons.value
+      .filter(h => ['upcoming','active','ended','vote_expired'].includes(getHackathonStatus(h)))
+      .sort((a,b) => new Date(a.start_time) - new Date(b.start_time));
+
+    // Pick first as currentHackathon for legacy usage
+    currentHackathon.value = activeUpcomingHackathons.value[0] || null;
+
+    // Load projects for each active/upcoming hackathon
+    for (let i = 0; i < activeUpcomingHackathons.value.length; i++) {
+      const h = activeUpcomingHackathons.value[i];
+      // Ensure placeholder _projects to avoid undefined in template while fetch in flight
+      activeUpcomingHackathons.value[i] = { ...h, _projects: [] };
+      await refreshSingleHackathon(h.id);
     }
   } catch (error) {
     console.error('Failed to load hackathons:', error);
@@ -199,6 +203,34 @@ async function loadData() {
   } finally {
     loading.value = false;
   }
+}
+
+async function refreshSingleHackathon(id) {
+  try {
+    const resp = await api.getHackathon(id);
+    if (resp.data.error) {
+      console.error('Database error loading hackathon:', resp.data.error);
+      return;
+    }
+    // Replace object in activeUpcomingHackathons
+    const idx = activeUpcomingHackathons.value.findIndex(h => h.id === id);
+    if (idx !== -1) {
+      // Keep projects under internal property for display
+      const updated = { ...resp.data, _projects: resp.data.projects || [] };
+      activeUpcomingHackathons.value[idx] = updated;
+      // If this is the first hackathon, mirror as currentHackathon
+      if (idx === 0) {
+        currentHackathon.value = updated;
+        projects.value = updated._projects;
+      }
+    }
+  } catch (e) {
+    console.error('Failed refreshing hackathon', id, e);
+  }
+}
+
+function handleHackathonStatusTransition(id) {
+  refreshSingleHackathon(id);
 }
 
 onMounted(() => {

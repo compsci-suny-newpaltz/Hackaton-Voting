@@ -24,15 +24,18 @@ CREATE TABLE IF NOT EXISTS hackathons (
   start_time DATETIME NOT NULL,
   end_time DATETIME NOT NULL,
   vote_expiration DATETIME,
+  review_ends_at DATETIME,
+  archived BOOLEAN DEFAULT 0,
   banner_url TEXT,
   banner_position_x INTEGER DEFAULT 50,
   banner_position_y INTEGER DEFAULT 50,
-  status TEXT DEFAULT 'upcoming',
   concluded_at DATETIME,
   concluded_by TEXT,
   created_by TEXT NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_hackathons_archived ON hackathons(archived);
+CREATE INDEX IF NOT EXISTS idx_hackathons_dates ON hackathons(start_time, end_time, vote_expiration);
 
 -- Projects
 CREATE TABLE IF NOT EXISTS projects (
@@ -112,6 +115,36 @@ CREATE TABLE IF NOT EXISTS judge_votes (
   FOREIGN KEY (judge_code_id) REFERENCES judge_codes(id),
   FOREIGN KEY (project_id) REFERENCES projects(id)
 );
+
+-- Judge Categories (dynamic rubric criteria per hackathon)
+CREATE TABLE IF NOT EXISTS judge_categories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  hackathon_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  weight REAL DEFAULT 1.0,
+  display_order INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (hackathon_id) REFERENCES hackathons(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_judge_categories_hackathon ON judge_categories(hackathon_id);
+
+-- Judge Category Votes (per-category scores replacing single score in judge_votes)
+CREATE TABLE IF NOT EXISTS judge_category_votes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  judge_code_id INTEGER NOT NULL,
+  project_id INTEGER NOT NULL,
+  category_id INTEGER NOT NULL,
+  score INTEGER NOT NULL CHECK(score >= 1 AND score <= 10),
+  comment TEXT,
+  voted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(judge_code_id, project_id, category_id),
+  FOREIGN KEY (judge_code_id) REFERENCES judge_codes(id) ON DELETE CASCADE,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+  FOREIGN KEY (category_id) REFERENCES judge_categories(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_judge_category_votes_judge ON judge_category_votes(judge_code_id);
+CREATE INDEX IF NOT EXISTS idx_judge_category_votes_project ON judge_category_votes(project_id);
 
 -- Comments
 CREATE TABLE IF NOT EXISTS comments (

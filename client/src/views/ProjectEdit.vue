@@ -236,8 +236,10 @@ import { useRoute } from 'vue-router';
 import { format } from 'date-fns';
 import api from '@/api';
 import ImageUploadWithPreview from '@/components/ImageUploadWithPreview.vue';
+import { useToast } from '@/composables/useToast';
 
 const route = useRoute();
+const toast = useToast();
 const loading = ref(true);
 const project = ref(null);
 const hackathon = ref(null);
@@ -368,11 +370,11 @@ async function loadData() {
 async function saveBasicInfo() {
   try {
     await api.updateProject(route.params.id, route.params.projectId, editData.value);
-    alert('Project updated successfully!');
+    toast.success('Project updated successfully!');
     await loadData();
   } catch (error) {
     console.error('Failed to update project:', error);
-    alert('Failed to update project. ' + (error.response?.data?.error || ''));
+    toast.error('Failed to update project. ' + (error.response?.data?.error || ''));
   }
 }
 
@@ -381,7 +383,7 @@ function handleFileSelect(event) {
   if (file) {
     // Check file size (50MB limit)
     if (file.size > 50 * 1024 * 1024) {
-      alert('File size must be less than 50MB');
+      toast.error('File size must be less than 50MB');
       event.target.value = '';
       return;
     }
@@ -399,21 +401,21 @@ function cancelFileSelect() {
 
 async function uploadFile() {
   if (!selectedFile.value) return;
-  
+
   uploading.value = true;
   try {
     await api.uploadProjectFile(
-      route.params.id, 
-      route.params.projectId, 
-      selectedFile.value, 
+      route.params.id,
+      route.params.projectId,
+      selectedFile.value,
       changelog.value
     );
-    alert('File uploaded successfully!');
+    toast.success('File uploaded successfully!');
     cancelFileSelect();
     await loadData();
   } catch (error) {
     console.error('Failed to upload file:', error);
-    alert('Failed to upload file. ' + (error.response?.data?.error || ''));
+    toast.error('Failed to upload file. ' + (error.response?.data?.error || ''));
   } finally {
     uploading.value = false;
   }

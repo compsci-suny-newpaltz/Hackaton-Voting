@@ -91,6 +91,9 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue';
+import { useToast } from '@/composables/useToast';
+
+const toast = useToast();
 
 const props = defineProps({
   label: {
@@ -170,17 +173,17 @@ watch(() => props.position, (newPos) => {
 function handleFileSelect(event) {
   const file = event.target.files[0];
   if (!file) return;
-  
+
   // Validate file type
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-    alert('Please select a JPG, PNG, or WebP image.');
+    toast.error('Please select a JPG, PNG, or WebP image.');
     if (fileInputRef.value) fileInputRef.value.value = '';
     return;
   }
-  
+
   // Validate file size (25MB)
   if (file.size > 25 * 1024 * 1024) {
-    alert('Image must be less than 25MB.');
+    toast.error('Image must be less than 25MB.');
     if (fileInputRef.value) fileInputRef.value.value = '';
     return;
   }
@@ -220,33 +223,35 @@ function startDrag(event) {
   
   const handleMove = (e) => {
     if (!isDragging.value) return;
-    
+
     const moveX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
     const moveY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
-    
+
     const deltaX = moveX - dragStart.value.x;
     const deltaY = moveY - dragStart.value.y;
-    
+
     // Convert pixel movement to percentage (inverted because we're moving the focal point)
     const sensitivity = 0.2;
     const newX = Math.max(0, Math.min(100, imagePosition.value.x - deltaX * sensitivity));
     const newY = Math.max(0, Math.min(100, imagePosition.value.y - deltaY * sensitivity));
-    
+
     imagePosition.value = { x: newX, y: newY };
     dragStart.value = { x: moveX, y: moveY };
-    
-    // Emit position update
-    emit('update:position', imagePosition.value);
+
+    // NOTE: Debounced behavior - do NOT emit on every move to avoid excessive network calls.
+    // Final emission occurs in handleEnd.
   };
   
   const handleEnd = () => {
     if (isDragging.value) {
       isDragging.value = false;
-      // Emit final position
-      emit('update:position', {
+      // Emit final (debounced) position after short delay to batch quick end events
+      const finalPos = {
         x: Math.round(imagePosition.value.x),
         y: Math.round(imagePosition.value.y)
-      });
+      };
+      // Small timeout to debounce potential extra mouseup/touchend bursts
+      setTimeout(() => emit('update:position', finalPos), 50);
     }
     document.removeEventListener('mousemove', handleMove);
     document.removeEventListener('mouseup', handleEnd);

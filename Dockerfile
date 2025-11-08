@@ -20,7 +20,7 @@ RUN npm ci || npm install
 
 # Install client deps
 WORKDIR /app/client
-RUN npm ci || npm install
+RUN npm ci --ignore-scripts || npm install --ignore-scripts
 
 # Copy source
 WORKDIR /app

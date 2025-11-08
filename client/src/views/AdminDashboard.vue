@@ -116,6 +116,8 @@
         </div>
       </div>
     </div>
+
+    <ConfirmDialog ref="confirmDialog" />
   </div>
 </template>
 
@@ -125,7 +127,11 @@ import { useRouter } from 'vue-router';
 import { format } from 'date-fns';
 import api from '@/api';
 import ImageUploadWithPreview from '@/components/ImageUploadWithPreview.vue';
+import { useToast } from '@/composables/useToast';
+import ConfirmDialog from '@/components/ConfirmDialog.vue';
 
+const toast = useToast();
+const confirmDialog = ref(null);
 const loading = ref(true);
 const hackathons = ref([]);
 const admins = ref([]);
@@ -143,6 +149,41 @@ const newHackathon = ref({
   end_time: '',   // bound to datetime-local
 });
 
+// Helper function to show confirmation dialogs
+async function showConfirm(options) {
+  return new Promise((resolve) => {
+    const dialog = confirmDialog.value;
+    if (!dialog) {
+      resolve(false);
+      return;
+    }
+
+    const handleConfirm = () => {
+      resolve(true);
+    };
+
+    const handleCancel = () => {
+      resolve(false);
+    };
+
+    // Use DOM event listeners for one-time events
+    dialog.$el?.addEventListener('confirm', handleConfirm, { once: true });
+    dialog.$el?.addEventListener('cancel', handleCancel, { once: true });
+
+    // Set dialog properties
+    Object.assign(dialog, {
+      title: options.title || 'Confirm Action',
+      message: options.message,
+      confirmText: options.confirmText || 'Confirm',
+      cancelText: options.cancelText || 'Cancel',
+      type: options.type || 'warning',
+      loadingText: options.loadingText || ''
+    });
+
+    dialog.show();
+  });
+}
+
 function formatDate(dateString) {
   return format(new Date(dateString), 'MMM d, yyyy');
 }
@@ -159,7 +200,7 @@ async function loadData() {
     auditLogs.value = response.data.auditLogs || [];
   } catch (error) {
     console.error('Failed to load dashboard:', error);
-    alert('Failed to load dashboard. Are you an admin?');
+    toast.error('Failed to load dashboard. Are you an admin?');
   } finally {
     loading.value = false;
   }
@@ -172,17 +213,26 @@ async function addAdmin() {
     newAdminEmail.value = '';
     await loadData();
   } catch (error) {
-    alert('Failed to add admin');
+    toast.error('Failed to add admin');
   }
 }
 
 async function removeAdmin(email) {
-  if (!confirm(`Remove ${email} as admin?`)) return;
+  const confirmed = await showConfirm({
+    title: 'Remove Admin',
+    message: `Remove ${email} as admin? They will lose all admin privileges.`,
+    confirmText: 'Remove',
+    cancelText: 'Cancel',
+    type: 'danger'
+  });
+
+  if (!confirmed) return;
+
   try {
     await api.removeAdmin(email);
     await loadData();
   } catch (error) {
-    alert('Failed to remove admin');
+    toast.error('Failed to remove admin');
   }
 }
 
@@ -195,7 +245,7 @@ function toIso(dtLocal) {
 
 async function createHackathon() {
   if (!newHackathon.value.name || !newHackathon.value.start_time || !newHackathon.value.end_time) {
-    alert('Name, start time, and end time are required.');
+    toast.warning('Name, start time, and end time are required.');
     return;
   }
   try {
@@ -208,9 +258,9 @@ async function createHackathon() {
     
     const res = await api.createHackathon(payload);
     const hackathonId = res.data?.id;
-    
+
     if (!hackathonId) {
-      alert('Failed to create hackathon.');
+      toast.error('Failed to create hackathon.');
       return;
     }
     
@@ -224,7 +274,7 @@ async function createHackathon() {
         await api.uploadHackathonBanner(hackathonId, formData);
       } catch (uploadError) {
         console.error('Failed to upload banner:', uploadError);
-        alert('Hackathon created, but banner upload failed. You can add it later in settings.');
+        toast.warning('Hackathon created, but banner upload failed. You can add it later in settings.');
       }
     }
     
@@ -238,7 +288,7 @@ async function createHackathon() {
     router.push(`/hackathons/admin/hackathons/${hackathonId}/settings`);
   } catch (error) {
     console.error('Create hackathon failed:', error);
-    alert('Failed to create hackathon.');
+    toast.error('Failed to create hackathon.');
   }
 }
 

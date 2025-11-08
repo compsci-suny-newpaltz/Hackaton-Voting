@@ -1,62 +1,98 @@
 const { addDays } = require('date-fns');
 
 /**
- * Calculate hackathon status based on current time
+ * Calculate hackathon status based on current time in Eastern Time
+ * All comparisons are done in Eastern Time (EST/EDT)
+ * Possible statuses: upcoming, active, ended, vote_expired, review-period, concluded, archived
  */
 function calculateHackathonStatus(hackathon) {
-  const now = new Date();
-  const startTime = new Date(hackathon.start_time);
-  const endTime = new Date(hackathon.end_time);
-  const voteExpiration = hackathon.vote_expiration 
-    ? new Date(hackathon.vote_expiration)
-    : addDays(new Date(hackathon.end_time), 7); // Default: 7 days after end
-  
+  // Get current time in Eastern Time
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+
+  // Convert stored UTC times to Eastern Time for comparison
+  const startTime = new Date(new Date(hackathon.start_time).toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const endTime = new Date(new Date(hackathon.end_time).toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const voteExpiration = hackathon.vote_expiration
+    ? new Date(new Date(hackathon.vote_expiration).toLocaleString('en-US', { timeZone: 'America/New_York' }))
+    : addDays(endTime, 7); // Default: 7 days after end
+  const reviewEndsAt = hackathon.review_ends_at
+    ? new Date(new Date(hackathon.review_ends_at).toLocaleString('en-US', { timeZone: 'America/New_York' }))
+    : null;
+
+  // Archived
+  if (hackathon.archived) {
+    return {
+      status: 'archived',
+      canVote: false,
+      canSubmit: false,
+      voteExpiration: voteExpiration,
+      isPublicResultsVisible: true // Archived hackathons show results
+    };
+  }
+
   // If manually concluded
   if (hackathon.concluded_at) {
     return {
       status: 'concluded',
       canVote: false,
       canSubmit: false,
-      voteExpiration: voteExpiration
+      voteExpiration: voteExpiration,
+      isPublicResultsVisible: true
     };
   }
-  
+
+  // Review period (after voting expires, before review ends)
+  if (reviewEndsAt && now >= voteExpiration && now < reviewEndsAt) {
+    return {
+      status: 'review-period',
+      canVote: false,
+      canSubmit: false,
+      voteExpiration: voteExpiration,
+      reviewEndsAt: reviewEndsAt,
+      isPublicResultsVisible: false // Results hidden during review
+    };
+  }
+
   // Upcoming
   if (now < startTime) {
     return {
       status: 'upcoming',
       canVote: false,
       canSubmit: false,
-      voteExpiration: voteExpiration
+      voteExpiration: voteExpiration,
+      isPublicResultsVisible: false
     };
   }
-  
-  // Active
+
+  // Active (submissions open)
   if (now >= startTime && now < endTime) {
     return {
       status: 'active',
       canVote: true,
       canSubmit: true,
-      voteExpiration: voteExpiration
+      voteExpiration: voteExpiration,
+      isPublicResultsVisible: false
     };
   }
-  
-  // Ended (but voting still open)
+
+  // Ended (submissions closed, voting still open)
   if (now >= endTime && now < voteExpiration) {
     return {
       status: 'ended',
       canVote: true,
       canSubmit: false,
-      voteExpiration: voteExpiration
+      voteExpiration: voteExpiration,
+      isPublicResultsVisible: false
     };
   }
-  
-  // Vote expired
+
+  // Vote expired (no review period or review period ended)
   return {
     status: 'vote_expired',
     canVote: false,
     canSubmit: false,
-    voteExpiration: voteExpiration
+    voteExpiration: voteExpiration,
+    isPublicResultsVisible: !reviewEndsAt || now >= reviewEndsAt // Show results if no review period or review ended
   };
 }
 

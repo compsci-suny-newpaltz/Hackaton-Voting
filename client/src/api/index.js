@@ -74,7 +74,15 @@ export default {
   toggleDeadlineOverride(hackathonId, projectId) {
     return api.post(`/${hackathonId}/projects/${projectId}/deadline-override`);
   },
-  
+
+  addTeamMember(hackathonId, projectId, email) {
+    return api.post(`/${hackathonId}/projects/${projectId}/team-members`, { email });
+  },
+
+  removeTeamMember(hackathonId, projectId, email) {
+    return api.delete(`/${hackathonId}/projects/${projectId}/team-members/${encodeURIComponent(email)}`);
+  },
+
   deleteProject(hackathonId, projectId) {
     return api.delete(`/${hackathonId}/projects/${projectId}`);
   },
@@ -144,12 +152,33 @@ export default {
       params: { code: codeId }
     });
   },
-  
+
+  // Judge Categories
+  getJudgeCategories(hackathonId) {
+    return api.get(`/admin/hackathons/${hackathonId}/categories`);
+  },
+
+  createJudgeCategory(hackathonId, data) {
+    return api.post(`/admin/hackathons/${hackathonId}/categories`, data);
+  },
+
+  updateJudgeCategory(categoryId, data) {
+    return api.put(`/admin/categories/${categoryId}`, data);
+  },
+
+  deleteJudgeCategory(categoryId) {
+    return api.delete(`/admin/categories/${categoryId}`);
+  },
+
+  reorderJudgeCategories(hackathonId, categoryIds) {
+    return api.post(`/admin/hackathons/${hackathonId}/categories/reorder`, { categoryIds });
+  },
+
   // Results
   getHackathonResults(hackathonId) {
     return api.get(`/${hackathonId}/results`);
   },
-  
+
   getProjectScores(hackathonId, projectId) {
     return api.get(`/${hackathonId}/projects/${projectId}/scores`);
   }

@@ -2,16 +2,60 @@
 
 A complete hackathon management system for SUNY New Paltz using Hydra SSO authentication.
 
+> **🎉 Latest Implementation (Nov 7, 2025):** Phases 2A, 3A-C, 4A-C complete!
+> - **Backend:** Hackathon lifecycle, project visibility, team management, email masking ✅
+> - **Frontend:** Judge category management UI, category-based voting interface, weighted results display ✅
+>
+> See [PHASE_2A_3ABC_COMPLETE.md](PHASE_2A_3ABC_COMPLETE.md), [PHASE_4AB_FRONTEND_COMPLETE.md](PHASE_4AB_FRONTEND_COMPLETE.md), and [PHASE_4C_RESULTS_DISPLAY_COMPLETE.md](PHASE_4C_RESULTS_DISPLAY_COMPLETE.md) for details.
+
 ## Features
 
+### Core Features
 - **Authentication**: Hydra SSO integration with `np_access` cookie
 - **Admin System**: Hardcoded admin, faculty auto-admins, and manual whitelist
-- **Hackathon Management**: Create, manage, and conclude hackathons
-- **Project Management**: Team-based project submissions with file uploads
-- **Popular Voting**: Student/faculty voting system with expiration dates
-- **Judge Voting**: Code-based judge authentication and scoring
-- **Comments**: Real-time commenting system
 - **Audit Logging**: Complete audit trail of all admin actions
+
+### Hackathon Management ✨
+- **7-State Lifecycle**: upcoming → active → ended → vote_expired → review-period → concluded → archived
+- **Review Period**: Optional window before public results (configurable per hackathon)
+- **Archive System**: Mark old hackathons as archived with audit logging
+- **Multi-Hackathon Support**: Run multiple concurrent hackathons
+- **Comprehensive Validation**: Time constraints, length limits, domain validation
+
+### Project Management ✨
+- **Team Management**: Add/remove team members with validation
+- **Email Masking**: Privacy-preserving display (j***e@newpaltz.edu) for non-team members
+- **Visibility Control**: Role-based access (creator, team, admin, public)
+- **File Uploads**: Single-file replace model with version history
+- **Email Validation**: Domain enforcement (@newpaltz.edu including subdomains)
+
+### Voting Systems
+- **Popular Voting**: One vote per user per project, expiration enforcement, audit trails
+- **Judge Voting**: Category-based rubric scoring with weights ⭐ NEW!
+  - Dynamic categories (Innovation, Functionality, Design, Presentation)
+  - Customizable weights per category (multipliers)
+  - Score 1-10 per category with optional comments
+  - Progress tracking (x/y projects scored)
+  - Visual completion indicators (green rings, checkmarks)
+
+### Judge Rubric System ⭐ NEW!
+- **Admin Category Manager**: Add, edit, delete, reorder categories
+- **Weight System**: Multipliers (0.1 to 5.0) for category importance
+- **Inline Editing**: Edit categories without page reload
+- **Weighted Results**: Automatic calculation of weighted average scores
+- **Per-Category Comments**: Optional feedback for each criterion
+
+### Results Display ⭐ NEW!
+- **Weighted Score Rankings**: Projects ranked by category-weighted averages
+- **Sort Controls**: Toggle between judge scores and popular votes
+- **Score Range Display**: Min-max scores across all judges
+- **Expandable Details**: Per-project category breakdown
+- **Category Statistics**: Avg, min, max per category with vote counts
+- **Individual Judge Scores**: Full transparency with comments and timestamps
+
+### Other Features
+- **Comments**: Real-time commenting with soft-delete
+- **Data Integrity**: Comprehensive server-side validation for all inputs
 
 ## Product & UX Decisions (Authoritative)
 
@@ -39,8 +83,8 @@ This section captures key decisions that guide the UX and data model. Implementa
 - A running counter shows progress, e.g., (x/y judgments completed) above the project list.
 - Judges can edit their submitted scores until the judging phase closes.
 
-### Drafts, Teams, Notifications
-- Draft projects are visible only to the creator until published (not visible to teammates until published).
+### Teams, Notifications
+- All projects are visible to all users immediately after creation.
 - No notifications (no emails or in-app notifications) for any events.
 - Project ownership is not transferable.
 

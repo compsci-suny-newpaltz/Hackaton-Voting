@@ -232,6 +232,8 @@
     <div v-else class="text-center py-12">
       <p class="text-gray-600">Project not found.</p>
     </div>
+
+    <ConfirmDialog ref="confirmDialog" />
   </div>
 </template>
 
@@ -241,8 +243,12 @@ import { useRoute } from 'vue-router';
 import { marked } from 'marked';
 import { formatDistanceToNow, format } from 'date-fns';
 import api from '@/api';
+import { useToast } from '@/composables/useToast';
+import ConfirmDialog from '@/components/ConfirmDialog.vue';
 
 const route = useRoute();
+const toast = useToast();
+const confirmDialog = ref(null);
 const loading = ref(true);
 const project = ref(null);
 const comments = ref([]);
@@ -253,6 +259,41 @@ const newComment = ref('');
 const judgeScores = ref(null);
 const editingCommentId = ref(null);
 const editingCommentText = ref('');
+
+// Helper function to show confirmation dialogs
+async function showConfirm(options) {
+  return new Promise((resolve) => {
+    const dialog = confirmDialog.value;
+    if (!dialog) {
+      resolve(false);
+      return;
+    }
+
+    const handleConfirm = () => {
+      resolve(true);
+    };
+
+    const handleCancel = () => {
+      resolve(false);
+    };
+
+    // Use DOM event listeners for one-time events
+    dialog.$el?.addEventListener('confirm', handleConfirm, { once: true });
+    dialog.$el?.addEventListener('cancel', handleCancel, { once: true });
+
+    // Set dialog properties
+    Object.assign(dialog, {
+      title: options.title || 'Confirm Action',
+      message: options.message,
+      confirmText: options.confirmText || 'Confirm',
+      cancelText: options.cancelText || 'Cancel',
+      type: options.type || 'warning',
+      loadingText: options.loadingText || ''
+    });
+
+    dialog.show();
+  });
+}
 
 const isTeamMember = computed(() => {
   if (!user.value || !project.value) return false;
@@ -344,19 +385,21 @@ async function castVote() {
     voteStatus.value.hasVoted = true;
     project.value.vote_count = (project.value.vote_count || 0) + 1;
   } catch (error) {
-    alert('Failed to vote');
+    // Show detailed error message from backend
+    const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Failed to vote';
+    toast.error(errorMessage, { duration: 5000 });
   }
 }
 
 async function addComment() {
   if (!newComment.value.trim()) return;
-  
+
   try {
     await api.addComment(route.params.id, route.params.projectId, newComment.value);
     newComment.value = '';
     await loadData();
   } catch (error) {
-    alert('Failed to add comment');
+    toast.error('Failed to add comment');
   }
 }
 
@@ -372,27 +415,35 @@ function cancelEdit() {
 
 async function saveComment(commentId) {
   if (!editingCommentText.value.trim()) {
-    alert('Comment cannot be empty');
+    toast.warning('Comment cannot be empty');
     return;
   }
-  
+
   try {
     await api.updateComment(route.params.id, route.params.projectId, commentId, editingCommentText.value);
     cancelEdit();
     await loadData();
   } catch (error) {
-    alert('Failed to update comment');
+    toast.error('Failed to update comment');
   }
 }
 
 async function deleteCommentConfirm(commentId) {
-  if (!confirm('Are you sure you want to delete this comment?')) return;
-  
+  const confirmed = await showConfirm({
+    title: 'Delete Comment',
+    message: 'Are you sure you want to delete this comment? This action cannot be undone.',
+    confirmText: 'Delete',
+    cancelText: 'Cancel',
+    type: 'danger'
+  });
+
+  if (!confirmed) return;
+
   try {
     await api.deleteComment(route.params.id, route.params.projectId, commentId);
     await loadData();
   } catch (error) {
-    alert('Failed to delete comment');
+    toast.error('Failed to delete comment');
   }
 }
 

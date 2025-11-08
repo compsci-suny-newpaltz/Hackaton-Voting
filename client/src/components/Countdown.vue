@@ -50,13 +50,18 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { format } from 'date-fns';
 
 const props = defineProps({
   hackathon: Object,
-  status: String
+  status: String,
+  pollIntervalMs: { type: Number, default: 5000 },
+  autoPoll: { type: Boolean, default: true }
 });
+
+// Emit events when we need parent to refresh hackathon data
+const emit = defineEmits(['refresh', 'status-transition']);
 
 const countdownEl = ref(null);
 const now = ref(new Date());
@@ -178,15 +183,67 @@ function formatDate(date) {
 }
 
 let interval;
+let pollTimer;
+
+function shouldPollStatus() {
+  if (!props.autoPoll || !props.hackathon) return false;
+  // Poll when we are in a liminal state: upcoming (near start), active (near end), ended (waiting for conclusion), vote_expired (waiting for conclude), or until concluded
+  const status = props.status;
+  if (status === 'concluded') return false;
+  return ['upcoming', 'active', 'ended', 'vote_expired'].includes(status);
+}
+
+function maybeTriggerTransitionCheck() {
+  if (!props.hackathon) return;
+  const nowMs = now.value.getTime();
+  const startMs = new Date(props.hackathon.start_time).getTime();
+  const endMs = new Date(props.hackathon.end_time).getTime();
+  const voteExpMs = props.hackathon.vote_expiration ? new Date(props.hackathon.vote_expiration).getTime() : endMs + 7*24*60*60*1000;
+
+  // If any countdown crosses 0, ask parent to refresh immediately
+  if (props.status === 'upcoming' && nowMs >= startMs) {
+    emit('status-transition', { from: 'upcoming', to: 'active' });
+    emit('refresh');
+  } else if (props.status === 'active' && nowMs >= endMs) {
+    emit('status-transition', { from: 'active', to: 'ended' });
+    emit('refresh');
+  } else if (props.status === 'ended' && nowMs >= voteExpMs) {
+    emit('status-transition', { from: 'ended', to: 'vote_expired' });
+    emit('refresh');
+  }
+}
+
+function startPolling() {
+  if (!shouldPollStatus()) return;
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(() => {
+    // Regular heartbeat to parent to refresh
+    emit('refresh');
+  }, props.pollIntervalMs);
+}
+
+function stopPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = null;
+}
 
 onMounted(() => {
   interval = setInterval(() => {
     now.value = new Date();
+    maybeTriggerTransitionCheck();
   }, 1000);
+  startPolling();
 });
 
 onUnmounted(() => {
   if (interval) clearInterval(interval);
+  stopPolling();
+});
+
+// Watch status changes from parent to adjust polling lifecycle
+watch(() => props.status, () => {
+  stopPolling();
+  startPolling();
 });
 </script>
 
