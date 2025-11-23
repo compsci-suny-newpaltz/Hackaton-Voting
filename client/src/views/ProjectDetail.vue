@@ -61,16 +61,20 @@
         </div>
         
         <div v-if="voteStatus">
-          <button 
+          <button
             v-if="voteStatus.canVote && !voteStatus.hasVoted"
             @click="castVote"
             class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
           >
             👍 Vote
           </button>
-          <div v-else-if="voteStatus.hasVoted" class="text-gray-600">
-            ✓ You voted
-          </div>
+          <button
+            v-else-if="voteStatus.hasVoted"
+            @click="removeVote"
+            class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+          >
+            ✓ Voted (click to remove)
+          </button>
           <div v-else-if="voteStatus.reason === 'own_project'" class="text-gray-600">
             Your Project
           </div>
@@ -384,10 +388,23 @@ async function castVote() {
     await api.vote(route.params.id, route.params.projectId);
     voteStatus.value.hasVoted = true;
     project.value.vote_count = (project.value.vote_count || 0) + 1;
+    toast.success('Vote recorded!');
   } catch (error) {
     // Show detailed error message from backend
     const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Failed to vote';
     toast.error(errorMessage, { duration: 5000 });
+  }
+}
+
+async function removeVote() {
+  try {
+    await api.removeVote(route.params.id, route.params.projectId);
+    voteStatus.value.hasVoted = false;
+    project.value.vote_count = Math.max(0, (project.value.vote_count || 0) - 1);
+    toast.success('Vote removed. You can now vote for another project.');
+  } catch (error) {
+    const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Failed to remove vote';
+    toast.error(errorMessage);
   }
 }
 

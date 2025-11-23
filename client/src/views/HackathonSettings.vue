@@ -213,60 +213,120 @@
       <!-- Judges Management -->
       <div class="bg-white rounded-lg shadow p-6 mb-6">
         <h2 class="text-xl font-semibold mb-4">Judges Management</h2>
-        
-        <div class="mb-4">
-          <input 
-            v-model="newJudgeName"
-            type="text"
-            placeholder="Judge Name"
-            class="px-4 py-2 border rounded mr-2"
-          />
-          <button 
-            @click="generateJudgeLink"
-            class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
-            Generate Voting Link
-          </button>
+
+        <div class="mb-4 space-y-3">
+          <div>
+            <input
+              v-model="newJudgeName"
+              type="text"
+              placeholder="Judge Name"
+              class="px-4 py-2 border rounded mr-2"
+            />
+            <button
+              @click="generateJudgeLink"
+              class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              Generate Voting Link
+            </button>
+          </div>
+          <div>
+            <label class="flex items-center text-sm">
+              <input
+                v-model="newJudgeAnonymous"
+                type="checkbox"
+                class="mr-2"
+              />
+              <span>Keep responses anonymous (judge name will not be shown with their scores)</span>
+            </label>
+          </div>
         </div>
-        
+
         <div v-if="generatedLink" class="mb-4 p-4 bg-green-50 border border-green-200 rounded">
           <p class="font-semibold mb-2">Judge Link Generated:</p>
-          <input 
+          <input
             :value="generatedLink"
             readonly
             class="w-full px-4 py-2 bg-white border rounded mb-2"
           />
-          <button 
+          <button
             @click="copyLink"
             class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm"
           >
             Copy Link
           </button>
         </div>
-        
+
         <div class="space-y-2">
-          <div 
-            v-for="judge in settings.judges" 
+          <div
+            v-for="judge in settings.judges"
             :key="judge.id"
             class="p-3 border rounded"
           >
-            <div class="flex items-center justify-between">
+            <!-- Edit Mode -->
+            <div v-if="editingJudgeId === judge.id" class="space-y-3">
               <div>
-                <h3 class="font-semibold">{{ judge.judge_name }}</h3>
-                <p class="text-sm text-gray-600">{{ judge.link }}</p>
-                <p class="text-sm" :class="judge.voted ? 'text-green-600' : 'text-yellow-600'">
-                  {{ judge.voted ? '✅ Voted' : '⏳ Not Voted' }}
-                  <span v-if="judge.voted_at"> • {{ formatDate(judge.voted_at) }}</span>
-                </p>
+                <label class="block text-sm font-medium mb-1">Judge Name</label>
+                <input
+                  v-model="editingJudgeName"
+                  type="text"
+                  class="w-full px-4 py-2 border rounded"
+                />
+              </div>
+              <div>
+                <label class="flex items-center text-sm">
+                  <input
+                    v-model="editingJudgeAnonymous"
+                    type="checkbox"
+                    class="mr-2"
+                  />
+                  <span>Keep responses anonymous</span>
+                </label>
               </div>
               <div class="flex space-x-2">
-                <button 
+                <button
+                  @click="saveJudgeEdit(judge)"
+                  class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
+                >
+                  Save
+                </button>
+                <button
+                  @click="cancelJudgeEdit"
+                  class="px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+
+            <!-- View Mode -->
+            <div v-else class="flex items-center justify-between">
+              <div class="flex-1">
+                <h3 class="font-semibold">{{ judge.judge_name }}</h3>
+                <p class="text-sm text-gray-600">{{ judge.link }}</p>
+                <div class="flex items-center gap-3 mt-1">
+                  <p class="text-sm" :class="judge.voted ? 'text-green-600' : 'text-yellow-600'">
+                    {{ judge.voted ? '✅ Voted' : '⏳ Not Voted' }}
+                    <span v-if="judge.voted_at"> • {{ formatDate(judge.voted_at) }}</span>
+                  </p>
+                  <span v-if="judge.anonymous_responses" class="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded">
+                    Anonymous
+                  </span>
+                </div>
+              </div>
+              <div class="flex space-x-2">
+                <button
+                  @click="startEditJudge(judge)"
+                  class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                >
+                  Edit
+                </button>
+                <button
                   @click="copyJudgeLink(judge.link)"
                   class="px-3 py-1 bg-gray-600 text-white rounded hover:bg-gray-700 text-sm"
                 >
                   Copy
                 </button>
-                <button 
+                <button
                   @click="revokeJudgeCode(judge.id, judge.code)"
                   class="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
                 >
@@ -477,7 +537,11 @@ const toast = useToast();
 const loading = ref(true);
 const settings = ref(null);
 const newJudgeName = ref('');
+const newJudgeAnonymous = ref(false);
 const generatedLink = ref('');
+const editingJudgeId = ref(null);
+const editingJudgeName = ref('');
+const editingJudgeAnonymous = ref(false);
 const newProject = ref({
   name: '',
   emails: ''
@@ -729,9 +793,10 @@ async function deleteProject(projectId) {
 async function generateJudgeLink() {
   if (!newJudgeName.value.trim()) return;
   try {
-    const response = await api.createJudgeCode(route.params.id, newJudgeName.value);
+    const response = await api.createJudgeCode(route.params.id, newJudgeName.value, newJudgeAnonymous.value);
     generatedLink.value = response.data.link;
     newJudgeName.value = '';
+    newJudgeAnonymous.value = false;
     await loadData();
   } catch (error) {
     toast.error('Failed to generate judge link');
@@ -765,6 +830,41 @@ async function revokeJudgeCode(codeId, code) {
     toast.success('Judge code revoked');
   } catch (error) {
     toast.error('Failed to revoke code');
+  }
+}
+
+function startEditJudge(judge) {
+  editingJudgeId.value = judge.id;
+  editingJudgeName.value = judge.judge_name;
+  editingJudgeAnonymous.value = judge.anonymous_responses === 1 || judge.anonymous_responses === true;
+}
+
+function cancelJudgeEdit() {
+  editingJudgeId.value = null;
+  editingJudgeName.value = '';
+  editingJudgeAnonymous.value = false;
+}
+
+async function saveJudgeEdit(judge) {
+  if (!editingJudgeName.value.trim()) {
+    toast.warning('Judge name cannot be empty');
+    return;
+  }
+
+  try {
+    await api.updateJudgeCode(
+      route.params.id,
+      judge.id,
+      judge.code,
+      editingJudgeName.value,
+      editingJudgeAnonymous.value
+    );
+    toast.success('Judge updated successfully');
+    cancelJudgeEdit();
+    await loadData();
+  } catch (error) {
+    console.error('Failed to update judge:', error);
+    toast.error('Failed to update judge');
   }
 }
 

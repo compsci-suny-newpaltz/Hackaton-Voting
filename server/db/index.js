@@ -254,12 +254,31 @@ const dbOperations = {
   },
   
   createJudgeCode(data) {
-    const { code, judge_name, hackathon_id, created_by, expires_at } = data;
+    const { code, judge_name, hackathon_id, created_by, expires_at, anonymous_responses } = data;
     return db.prepare(
-      'INSERT INTO judge_codes (code, judge_name, hackathon_id, created_by, expires_at) VALUES (?, ?, ?, ?, ?)'
-    ).run(code, judge_name, hackathon_id, created_by, expires_at);
+      'INSERT INTO judge_codes (code, judge_name, hackathon_id, created_by, expires_at, anonymous_responses) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(code, judge_name, hackathon_id, created_by, expires_at, anonymous_responses || 0);
   },
-  
+
+  updateJudgeCode(id, data) {
+    checkDb();
+    const fields = [];
+    const values = [];
+    for (const [key, value] of Object.entries(data)) {
+      if (value !== undefined) {
+        fields.push(`${key} = ?`);
+        values.push(value);
+      }
+    }
+
+    if (fields.length === 0) {
+      throw new Error('updateJudgeCode: No fields provided to update');
+    }
+
+    values.push(id);
+    return db.prepare(`UPDATE judge_codes SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  },
+
   revokeJudgeCode(code) {
     return db.prepare('UPDATE judge_codes SET revoked = 1 WHERE code = ?').run(code);
   },

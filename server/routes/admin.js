@@ -172,42 +172,73 @@ router.delete('/admins/:email', requireNP, requireAdmin, (req, res) => {
 
 // Judge management
 router.post('/hackathons/:id/judges', requireNP, requireAdmin, (req, res) => {
-  const { judge_name } = req.body;
-  
+  const { judge_name, anonymous_responses } = req.body;
+
   if (!judge_name || !judge_name.trim()) {
     return res.status(400).json({ error: 'Judge name required' });
   }
-  
+
   const hackathon = db.getHackathon(req.params.id);
   if (!hackathon) {
     return res.status(404).json({ error: 'Hackathon not found' });
   }
-  
+
   const code = generateJudgeCode();
   const expiresAt = new Date();
   expiresAt.setHours(expiresAt.getHours() + parseInt(process.env.JUDGE_CODE_EXPIRY_HOURS || '168'));
-  
+
   const result = db.createJudgeCode({
     code,
     judge_name: judge_name.trim(),
     hackathon_id: req.params.id,
     created_by: req.user.email,
-    expires_at: expiresAt.toISOString()
+    expires_at: expiresAt.toISOString(),
+    anonymous_responses: anonymous_responses ? 1 : 0
   });
-  
+
   const link = generateJudgeLink(req.params.id, code);
-  
+
   logAudit(req.user.email, 'judge_link_generated', `judge_${result.lastInsertRowid}`, {
     judge_name,
-    hackathon_id: req.params.id
+    hackathon_id: req.params.id,
+    anonymous_responses: anonymous_responses ? 1 : 0
   });
-  
+
   res.json({
     id: result.lastInsertRowid,
     code,
     link,
-    judge_name
+    judge_name,
+    anonymous_responses: anonymous_responses ? 1 : 0
   });
+});
+
+router.put('/hackathons/:id/judges/:judgeId', requireNP, requireAdmin, (req, res) => {
+  const { judge_name, anonymous_responses } = req.body;
+
+  // Get the judge code to verify it exists and belongs to this hackathon
+  const judgeCode = db.getJudgeCode(req.body.code);
+  if (!judgeCode || judgeCode.hackathon_id !== parseInt(req.params.id) || judgeCode.id !== parseInt(req.params.judgeId)) {
+    return res.status(404).json({ error: 'Judge code not found' });
+  }
+
+  const updateData = {};
+  if (judge_name !== undefined && judge_name.trim()) {
+    updateData.judge_name = judge_name.trim();
+  }
+  if (anonymous_responses !== undefined) {
+    updateData.anonymous_responses = anonymous_responses ? 1 : 0;
+  }
+
+  if (Object.keys(updateData).length === 0) {
+    return res.status(400).json({ error: 'No fields to update' });
+  }
+
+  db.updateJudgeCode(req.params.judgeId, updateData);
+
+  logAudit(req.user.email, 'judge_code_updated', `judge_${req.params.judgeId}`, updateData);
+
+  res.json({ success: true });
 });
 
 router.post('/hackathons/:id/judges/:codeId/revoke', requireNP, requireAdmin, (req, res) => {

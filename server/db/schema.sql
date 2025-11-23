@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS judge_codes (
   voted_at DATETIME,
   expires_at DATETIME NOT NULL,
   revoked BOOLEAN DEFAULT 0,
+  anonymous_responses BOOLEAN DEFAULT 0,
   FOREIGN KEY (hackathon_id) REFERENCES hackathons(id)
 );
 CREATE INDEX IF NOT EXISTS idx_judge_codes_code ON judge_codes(code);

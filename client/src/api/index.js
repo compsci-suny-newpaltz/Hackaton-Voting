@@ -91,11 +91,15 @@ export default {
   getVoteStatus(hackathonId, projectId) {
     return api.get(`/${hackathonId}/projects/${projectId}/vote-status`);
   },
-  
+
   vote(hackathonId, projectId) {
     return api.post(`/${hackathonId}/projects/${projectId}/vote`);
   },
-  
+
+  removeVote(hackathonId, projectId) {
+    return api.delete(`/${hackathonId}/projects/${projectId}/vote`);
+  },
+
   // Judge voting
   getJudgeVoting(hackathonId, code) {
     return api.get(`/${hackathonId}/judgevote`, { params: { code } });
@@ -143,10 +147,21 @@ export default {
     return api.delete(`/admin/admins/${email}`);
   },
   
-  createJudgeCode(hackathonId, judgeName) {
-    return api.post(`/admin/hackathons/${hackathonId}/judges`, { judge_name: judgeName });
+  createJudgeCode(hackathonId, judgeName, anonymousResponses) {
+    return api.post(`/admin/hackathons/${hackathonId}/judges`, {
+      judge_name: judgeName,
+      anonymous_responses: anonymousResponses
+    });
   },
-  
+
+  updateJudgeCode(hackathonId, judgeId, code, judgeName, anonymousResponses) {
+    return api.put(`/admin/hackathons/${hackathonId}/judges/${judgeId}`, {
+      code,
+      judge_name: judgeName,
+      anonymous_responses: anonymousResponses
+    });
+  },
+
   revokeJudgeCode(hackathonId, codeId) {
     return api.post(`/admin/hackathons/${hackathonId}/judges/${codeId}/revoke`, {}, {
       params: { code: codeId }
