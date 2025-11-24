@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS hackathons (
   banner_position_y INTEGER DEFAULT 50,
   concluded_at DATETIME,
   concluded_by TEXT,
+  keep_popular_vote_open BOOLEAN DEFAULT 1,
   created_by TEXT NOT NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

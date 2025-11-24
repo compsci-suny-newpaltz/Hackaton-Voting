@@ -28,6 +28,21 @@
             ></textarea>
           </div>
           <div>
+            <label class="flex items-center">
+              <input 
+                v-model="settings.hackathon.keep_popular_vote_open"
+                type="checkbox"
+                class="mr-2"
+              />
+              <span class="text-sm font-medium">
+                Keep popular voting open after hackathon conclusion
+              </span>
+            </label>
+            <p class="text-xs text-gray-500 mt-1 ml-6">
+              When enabled, users can continue to vote even after the hackathon is concluded
+            </p>
+          </div>
+          <div>
             <ImageUploadWithPreview
               label="Banner Image"
               :current-image-url="settings.hackathon.banner_url"

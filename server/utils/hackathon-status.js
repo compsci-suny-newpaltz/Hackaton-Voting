@@ -98,26 +98,22 @@ function calculateHackathonStatus(hackathon) {
 
 /**
  * Check if user can vote on a project
+ * Popular voting is always available (no time restrictions)
+ * Only restrictions: can't vote on own project, can't vote if concluded (unless keep_popular_vote_open is enabled)
  */
 function canVoteOnProject(hackathon, userEmail, project) {
-  const status = calculateHackathonStatus(hackathon);
-  
-  // Voting closed
-  if (status.status === 'concluded' || status.status === 'vote_expired') {
-    return { allowed: false, reason: status.status === 'concluded' ? 'hackathon_concluded' : 'voting_expired' };
+  // Only block if hackathon manually concluded AND keep_popular_vote_open is false
+  if (hackathon.concluded_at && !hackathon.keep_popular_vote_open) {
+    return { allowed: false, reason: 'hackathon_concluded' };
   }
-  
-  // Not started yet
-  if (status.status === 'upcoming') {
-    return { allowed: false, reason: 'not_started' };
-  }
-  
+
   // Check if user is team member
   const teamEmails = JSON.parse(project.team_emails || '[]');
   if (teamEmails.map(e => e.toLowerCase()).includes(userEmail.toLowerCase())) {
     return { allowed: false, reason: 'own_project' };
   }
-  
+
+  // Popular voting always available (requires SSO auth via requireNP middleware)
   return { allowed: true };
 }
 
@@ -151,4 +147,3 @@ module.exports = {
   canVoteOnProject,
   canEditProject
 };
-

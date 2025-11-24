@@ -39,25 +39,7 @@ router.post('/:hackathonId/projects/:projectId/vote', requireNP, (req, res) => {
     return res.status(404).json({ error: 'Hackathon not found' });
   }
 
-  // Explicit check for vote expiration
-  const now = new Date();
-  const voteExpiration = new Date(hackathon.vote_expiration);
-  if (now >= voteExpiration) {
-    return res.status(403).json({
-      error: 'voting_expired',
-      message: 'Voting period has ended',
-      expired_at: hackathon.vote_expiration
-    });
-  }
-
-  // Check if hackathon is concluded
-  if (hackathon.concluded_at) {
-    return res.status(403).json({
-      error: 'hackathon_concluded',
-      message: 'This hackathon has been concluded'
-    });
-  }
-
+  // Popular voting always available - only check project-specific restrictions
   const voteCheck = canVoteOnProject(hackathon, req.user.email, project);
   if (!voteCheck.allowed) {
     return res.status(403).json({ error: voteCheck.reason });
@@ -93,17 +75,8 @@ router.delete('/:hackathonId/projects/:projectId/vote', requireNP, (req, res) =>
     return res.status(404).json({ error: 'Hackathon not found' });
   }
 
-  // Check if voting is still allowed
-  const now = new Date();
-  const voteExpiration = new Date(hackathon.vote_expiration);
-  if (now >= voteExpiration) {
-    return res.status(403).json({
-      error: 'voting_expired',
-      message: 'Voting period has ended'
-    });
-  }
-
-  if (hackathon.concluded_at) {
+  // Only block if hackathon is concluded AND keep_popular_vote_open is false
+  if (hackathon.concluded_at && !hackathon.keep_popular_vote_open) {
     return res.status(403).json({
       error: 'hackathon_concluded',
       message: 'This hackathon has been concluded'
@@ -289,4 +262,3 @@ router.post('/:hackathonId/judgevote', (req, res) => {
 });
 
 module.exports = router;
-

@@ -78,13 +78,9 @@
           <div v-else-if="voteStatus.reason === 'own_project'" class="text-gray-600">
             Your Project
           </div>
-          <div v-else class="text-gray-600">
-            Voting closed
+          <div v-else-if="voteStatus.reason === 'hackathon_concluded'" class="text-gray-600">
+            Hackathon Concluded
           </div>
-          
-          <p v-if="voteStatus.voteExpiration && voteStatus.canVote" class="text-sm text-gray-600 mt-2">
-            Voting closes {{ formatDate(voteStatus.voteExpiration) }}
-          </p>
         </div>
         <div v-else-if="!user" class="text-gray-600">
           <a 
