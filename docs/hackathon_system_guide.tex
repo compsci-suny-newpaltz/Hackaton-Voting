@@ -1,0 +1,382 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage{float}
+\usepackage{mdframed}
+\usepackage{longtable}
+
+\geometry{margin=1in}
+
+\definecolor{hydra-blue}{RGB}{5,32,73}
+\definecolor{code-bg}{RGB}{248,248,248}
+\definecolor{warning-bg}{RGB}{255,243,205}
+\definecolor{success-bg}{RGB}{212,237,218}
+\definecolor{info-bg}{RGB}{217,237,247}
+
+\hypersetup{colorlinks=true,linkcolor=hydra-blue,urlcolor=blue}
+
+\lstdefinestyle{bash}{backgroundcolor=\color{code-bg},basicstyle=\ttfamily\small,breaklines=true,frame=single,numbers=none}
+\lstdefinestyle{js}{backgroundcolor=\color{code-bg},basicstyle=\ttfamily\small,breaklines=true,frame=single,numbers=left,language=Java}
+
+\newmdenv[backgroundcolor=warning-bg,linewidth=0pt,innerleftmargin=10pt,innerrightmargin=10pt,innertopmargin=10pt,innerbottommargin=10pt]{warningbox}
+\newmdenv[backgroundcolor=success-bg,linewidth=0pt,innerleftmargin=10pt,innerrightmargin=10pt,innertopmargin=10pt,innerbottommargin=10pt]{successbox}
+\newmdenv[backgroundcolor=info-bg,linewidth=0pt,innerleftmargin=10pt,innerrightmargin=10pt,innertopmargin=10pt,innerbottommargin=10pt]{infobox}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textbf{Hackathon System}}
+\fancyhead[R]{\textbf{Technical Guide}}
+\fancyfoot[C]{\thepage}
+\setlength{\headheight}{14pt}
+
+\title{\textbf{Hackathon Management \& Voting System}\\[0.5em]\large Technical Documentation}
+\author{Computer Science Department\\SUNY New Paltz}
+\date{February 2026}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+%% ============================================================
+\section{Overview}
+%% ============================================================
+
+The Hackathon Management \& Voting System is a full-stack web application for organizing, judging, and voting on hackathon projects at SUNY New Paltz. It integrates with Hydra SSO for authentication and supports multiple concurrent hackathons.
+
+\begin{infobox}
+\textbf{Repository:} \url{https://github.com/compsci-suny-newpaltz/Hackaton-Voting}\\
+\textbf{Frontend:} Vue.js 3 + Vite + TailwindCSS\\
+\textbf{Backend:} Node.js + Express\\
+\textbf{Database:} SQLite (better-sqlite3)\\
+\textbf{URL:} \url{https://hydra.newpaltz.edu/hackathons/}
+\end{infobox}
+
+%% ============================================================
+\section{Architecture}
+%% ============================================================
+
+\subsection{Tech Stack}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Layer} & \textbf{Technology} \\
+\midrule
+Frontend & Vue.js 3, Vue Router, Vite, TailwindCSS, Axios \\
+Backend & Node.js 18, Express 4, better-sqlite3 \\
+Auth & Hydra SSO (\texttt{np\_access} JWT cookie) \\
+File Upload & Multer (single-file replace model) \\
+Deployment & Docker Compose on Hydra (port 45821) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Project Structure}
+
+\begin{lstlisting}[style=bash]
+Hackaton-Voting/
+  client/           # Vue.js 3 SPA
+    src/
+      components/   # Reusable UI components
+      views/        # Page-level views
+      router/       # Vue Router config
+  server/
+    index.js        # Express entry point
+    db/
+      schema.sql    # SQLite schema
+      init.js       # Database initialization
+    routes/
+      hackathons.js # Hackathon CRUD + lifecycle
+      projects.js   # Project + team management
+      voting.js     # Popular + judge voting
+      admin.js      # Admin endpoints
+  public/           # Built client assets
+  docker-compose.yml
+  Dockerfile
+\end{lstlisting}
+
+%% ============================================================
+\section{Authentication}
+%% ============================================================
+
+The system delegates authentication to Hydra SAML Auth via the \texttt{np\_access} JWT cookie.
+
+\begin{enumerate}
+    \item User visits \texttt{/hackathons/}
+    \item If no valid \texttt{np\_access} cookie, redirect to \texttt{/login?returnTo=/hackathons/}
+    \item Hydra performs SAML SSO with Azure AD
+    \item On success, Hydra sets \texttt{np\_access} cookie (RS256 JWT)
+    \item Hackathon app verifies JWT using Hydra's JWKS endpoint
+\end{enumerate}
+
+\subsection{Admin Access}
+
+\begin{itemize}
+    \item Hardcoded admin: \texttt{gopeen1@newpaltz.edu}
+    \item Faculty auto-admins: users with \texttt{faculty} role in SSO claims
+    \item Manual whitelist: additional admins added via admin dashboard
+\end{itemize}
+
+%% ============================================================
+\section{Hackathon Lifecycle}
+%% ============================================================
+
+Each hackathon progresses through 7 states:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{State} & \textbf{Trigger} & \textbf{Description} \\
+\midrule
+\texttt{upcoming} & Created, start time in future & Not yet accepting submissions \\
+\texttt{active} & Current time $\geq$ start time & Accepting project submissions \\
+\texttt{ended} & Current time $\geq$ end time & Submissions closed, judging open \\
+\texttt{vote\_expired} & Current time $\geq$ vote expiration & All voting closed \\
+\texttt{review-period} & Vote expired, review window active & Admin reviews before results \\
+\texttt{concluded} & Review period ended & Results publicly visible \\
+\texttt{archived} & Admin manually archives & Hidden from default listings \\
+\bottomrule
+\end{tabular}
+\caption{Hackathon state machine}
+\end{table}
+
+\begin{infobox}
+\textbf{Time validation:} The system enforces \texttt{start\_time < end\_time < vote\_expiration}. The optional review period adds a \texttt{review\_ends\_at} timestamp between vote expiration and public results.
+\end{infobox}
+
+%% ============================================================
+\section{Voting Systems}
+%% ============================================================
+
+\subsection{Popular Vote}
+
+\begin{itemize}
+    \item One vote per user per project (enforced by DB uniqueness on \texttt{userId + projectId})
+    \item Users cannot vote for their own project
+    \item Vote counts displayed live with 5-second polling
+    \item Snapshot captured at vote close for historical display
+    \item Admin audit page shows all votes per project
+\end{itemize}
+
+\subsection{Judge Voting (Rubric System)}
+
+Judges score projects using a customizable category-based rubric:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}llr@{}}
+\toprule
+\textbf{Category} & \textbf{Description} & \textbf{Weight} \\
+\midrule
+Innovation / Creativity & Originality of idea or approach & 1.0 \\
+Functionality & Working features, reliability & 1.0 \\
+Design / Polish & UX, accessibility, visual quality & 1.0 \\
+Presentation / Demo & Communication of idea and goals & 1.0 \\
+\bottomrule
+\end{tabular}
+\caption{Default judge categories (customizable by admin)}
+\end{table}
+
+\begin{itemize}
+    \item Scores: 1--10 per category with optional comments
+    \item Weights: multiplier 0.1--5.0 per category (admin-editable)
+    \item Judges can edit scores until judging phase closes
+    \item Progress tracking: counter shows \texttt{x/y} projects scored
+    \item Saved projects display green outline with checkmark
+\end{itemize}
+
+\subsection{Results Calculation}
+
+The weighted score for each project is calculated as:
+
+\[
+\text{Score} = \frac{\sum_{i} w_i \cdot s_i}{\sum_{i} w_i}
+\]
+
+where $w_i$ is the category weight and $s_i$ is the average judge score for that category.
+
+%% ============================================================
+\section{Data Model}
+%% ============================================================
+
+\subsection{Core Tables}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Table} & \textbf{Purpose} \\
+\midrule
+\texttt{hackathons} & Hackathon metadata, times, settings \\
+\texttt{projects} & Team submissions with descriptions, files \\
+\texttt{team\_members} & Project-to-email associations \\
+\texttt{popular\_votes} & User upvotes (unique per user+project) \\
+\texttt{judge\_codes} & Secure access codes for judges \\
+\texttt{hackathon\_judge\_categories} & Rubric categories with weights \\
+\texttt{judge\_category\_votes} & Per-category scores from judges \\
+\texttt{comments} & Project discussion threads \\
+\texttt{audit\_log} & Admin action audit trail \\
+\bottomrule
+\end{tabular}
+\caption{Database schema overview}
+\end{table}
+
+\subsection{Key Constraints}
+
+\begin{itemize}
+    \item \texttt{UNIQUE(judge\_code\_id, project\_id, category\_id)} --- prevents duplicate judge scores
+    \item \texttt{CHECK(score >= 1 AND score <= 10)} --- enforces score range
+    \item \texttt{UNIQUE(user\_id, project\_id)} on popular votes --- one vote per user
+    \item Email domain enforcement: \texttt{@newpaltz.edu} and subdomains only
+\end{itemize}
+
+%% ============================================================
+\section{API Endpoints}
+%% ============================================================
+
+\subsection{Hackathon Management}
+
+\begin{longtable}{@{}lll@{}}
+\toprule
+\textbf{Method} & \textbf{Path} & \textbf{Description} \\
+\midrule
+\endhead
+GET & \texttt{/hackathons/active} & List active + upcoming hackathons \\
+POST & \texttt{/hackathons} & Create hackathon (admin) \\
+PUT & \texttt{/hackathons/:id} & Update hackathon (admin) \\
+POST & \texttt{/hackathons/:id/archive} & Archive hackathon (admin) \\
+\bottomrule
+\end{longtable}
+
+\subsection{Project \& Team}
+
+\begin{longtable}{@{}lll@{}}
+\toprule
+\textbf{Method} & \textbf{Path} & \textbf{Description} \\
+\midrule
+\endhead
+GET & \texttt{/:hid/projects} & List projects \\
+POST & \texttt{/:hid/projects} & Create project \\
+POST & \texttt{/:hid/projects/:pid/team-members} & Add team member \\
+DELETE & \texttt{/:hid/projects/:pid/team-members/:email} & Remove team member \\
+\bottomrule
+\end{longtable}
+
+\subsection{Voting}
+
+\begin{longtable}{@{}lll@{}}
+\toprule
+\textbf{Method} & \textbf{Path} & \textbf{Description} \\
+\midrule
+\endhead
+POST & \texttt{/:hid/projects/:pid/vote} & Cast popular vote \\
+POST & \texttt{/:hid/judge/:code/vote} & Submit judge scores \\
+GET & \texttt{/:hid/results} & Get weighted results \\
+\bottomrule
+\end{longtable}
+
+\subsection{Admin}
+
+\begin{longtable}{@{}lll@{}}
+\toprule
+\textbf{Method} & \textbf{Path} & \textbf{Description} \\
+\midrule
+\endhead
+GET & \texttt{/admin/hackathons/:id/categories} & List rubric categories \\
+POST & \texttt{/admin/hackathons/:id/categories} & Create category \\
+PUT & \texttt{/admin/categories/:id} & Update category \\
+DELETE & \texttt{/admin/categories/:id} & Delete category \\
+POST & \texttt{/admin/hackathons/:id/categories/reorder} & Reorder categories \\
+\bottomrule
+\end{longtable}
+
+%% ============================================================
+\section{Deployment}
+%% ============================================================
+
+\subsection{Docker Compose}
+
+\begin{lstlisting}[style=bash]
+# Build and start
+cd /home/infra/Hackaton-Voting
+docker compose build
+docker compose up -d
+
+# Logs
+docker logs hackathons-app --tail=50
+
+# Initialize database
+docker exec hackathons-app npm run init-db
+\end{lstlisting}
+
+\subsection{Local Development}
+
+\begin{lstlisting}[style=bash]
+# Install dependencies
+npm install
+cd client && npm install && cd ..
+
+# Initialize database
+npm run init-db
+
+# Create .env from example
+cp .env.example .env
+
+# Run dev servers (backend + Vite frontend)
+npm run dev
+\end{lstlisting}
+
+\begin{warningbox}
+\textbf{First admin access:} The hardcoded admin \texttt{gopeen1@newpaltz.edu} and any user with a \texttt{faculty} SSO role are automatically administrators. Access the admin dashboard at \texttt{/hackathons/admin/dashboard}.
+\end{warningbox}
+
+%% ============================================================
+\section{Security}
+%% ============================================================
+
+\begin{itemize}
+    \item \textbf{Authentication:} Delegated to Hydra SSO --- no local passwords
+    \item \textbf{Email privacy:} Non-team members see masked emails (\texttt{j***e@newpaltz.edu})
+    \item \textbf{Judge codes:} Cryptographically secure, hackathon-specific
+    \item \textbf{Input validation:} Server-side length limits, domain enforcement, time constraint validation
+    \item \textbf{SQL safety:} Parameterized queries via better-sqlite3
+    \item \textbf{Audit logging:} All admin actions recorded with timestamp and user
+\end{itemize}
+
+%% ============================================================
+\section{Implementation Status}
+%% ============================================================
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}llc@{}}
+\toprule
+\textbf{Phase} & \textbf{Description} & \textbf{Status} \\
+\midrule
+Phase 0--1 & Core constraints, data validation & Complete \\
+Phase 2 & Hackathon lifecycle \& concurrency & Complete \\
+Phase 3 & Project \& team management & Complete \\
+Phase 4 & Voting \& judging overhaul & Complete \\
+Phase 5 & UX feedback \& navigation & In Progress \\
+Phase 6 & Security \& permissions & Planned \\
+Phase 7 & File \& transaction safety & Planned \\
+Phase 8 & Performance \& scalability & Planned \\
+Phase 9 & Mobile \& responsive & Planned \\
+Phase 10 & Documentation & Planned \\
+\bottomrule
+\end{tabular}
+\caption{Development roadmap (see \texttt{TODOS.md} for full details)}
+\end{table}
+
+\end{document}
