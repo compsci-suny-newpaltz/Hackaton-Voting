@@ -1,5 +1,8 @@
 <template>
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Hero Slideshow -->
+    <HeroSlideshow />
+
     <div v-if="loading" class="text-center py-12">
       <div class="text-gray-600">Loading...</div>
     </div>
@@ -92,6 +95,7 @@ import { format } from 'date-fns';
 import api from '@/api';
 import Countdown from '@/components/Countdown.vue';
 import ProjectCard from '@/components/ProjectCard.vue';
+import HeroSlideshow from '@/components/HeroSlideshow.vue';
 
 const loading = ref(true);
 const databaseError = ref(false);
