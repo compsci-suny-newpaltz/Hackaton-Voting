@@ -41,6 +41,21 @@
     <main>
       <router-view />
     </main>
+
+    <!-- Footer -->
+    <footer class="bg-white border-t py-4 mt-8">
+      <div class="text-center">
+        <a
+          href="https://github.com/compsci-suny-newpaltz/Hackaton-Voting"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-gray-500 hover:text-blue-600 transition-colors text-sm"
+          title="View source on GitHub"
+        >
+          Made by: SUNY Hydra Lab Team 2026 @ SUNY New Paltz
+        </a>
+      </div>
+    </footer>
   </div>
 </template>
 
