@@ -14,7 +14,7 @@ function isAdmin(user) {
   
   // Hardcoded super admin
   if (email === 'gopeen1@newpaltz.edu') return true;
-  if (email === 'manzim1@newpaltz.edu') return true;
+  if (email === 'currym6@newpaltz.edu') return true;
 
   
   // Faculty are auto-admins
